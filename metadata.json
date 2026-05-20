@@ -1,0 +1,6 @@
+{
+  "name": "星辰影视",
+  "description": "星辰影视是一款自然、流畅的多源影视资源系统，提供多API换源、自动分类目录选择、收藏夹、以及内置视频播放器，尽享极简优雅的设计体验。",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

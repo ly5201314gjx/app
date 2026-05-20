@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Starry movie play icon centered in 66dp zone -->
+    <path
+        android:fillColor="#FCA524"
+        android:pathData="M42,32 L78,54 L42,76 Z" />
+    
+    <!-- Stylized surrounding movie frame brackets -->
+    <path
+        android:strokeColor="#E4703C"
+        android:strokeWidth="3.2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M30,28 H24 V34 M78,28 H84 V34 M30,80 H24 V74 M78,80 H84 V74" />
+</vector>
