@@ -13,6 +13,8 @@ import com.example.data.model.VodItem
 import com.example.data.repository.MovieRepository
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 
 sealed interface MovieUiState {
     object Idle : MovieUiState
@@ -127,21 +129,24 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
-    fun selectAndFetchDetails(vodId: Int, fallbackName: String) {
+    fun selectAndFetchDetails(vodId: Int, fallbackName: String, specificSourceUrl: String? = null) {
         viewModelScope.launch {
-            val source = repository.getActiveSource() ?: return@launch
+            val sourceUrl = specificSourceUrl ?: repository.getActiveSource()?.url ?: return@launch
             _uiState.value = MovieUiState.Loading
             try {
-                val response = repository.fetchVodDetails(source.url, vodId)
+                val response = repository.fetchVodDetails(sourceUrl, vodId)
                 val fullVodItem = response.list?.firstOrNull()
                 if (fullVodItem != null) {
+                    fullVodItem.apiSourceUrl = sourceUrl
+                    val allSrcs = apiSources.value
+                    fullVodItem.apiSourceName = allSrcs.find { it.url == sourceUrl }?.name ?: "专线"
                     selectedVod.value = fullVodItem
                     _uiState.value = MovieUiState.Success(response)
                 } else {
                     // Fallback search by name if ID did not match across sources
                     selectedVod.value = null
                     search(fallbackName)
-                    android.widget.Toast.makeText(getApplication(), "该视频在当前线路暂无对应ID，已为您自动全网搜索该片", android.widget.Toast.LENGTH_LONG).show()
+                    android.widget.Toast.makeText(getApplication(), "该视频在对应线路暂无对应ID，已为您自动全网搜索该片", android.widget.Toast.LENGTH_LONG).show()
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -155,24 +160,71 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
     fun loadMovies() {
         activeLoadJob?.cancel()
         activeLoadJob = viewModelScope.launch {
-            val source = repository.getActiveSource() ?: return@launch
+            val query = searchQuery.value
+            val isSearching = query.isNotBlank()
+            
             _uiState.value = MovieUiState.Loading
             try {
-                val response = repository.fetchVodList(
-                    baseUrl = source.url,
-                    pg = currentPage.value,
-                    categoryId = selectedCategory.value?.typeId,
-                    keyword = searchQuery.value.ifBlank { null }
-                )
-                
-                // Keep loaded categories in VM state so category picker has them
-                response.classList?.let { list ->
-                    if (list.isNotEmpty()) {
-                        _categories.value = list
+                if (isSearching) {
+                    val sources = apiSources.value.ifEmpty {
+                        listOfNotNull(repository.getActiveSource())
                     }
+                    val deferredRes = sources.map { source ->
+                        async(kotlinx.coroutines.Dispatchers.IO) {
+                            try {
+                                val res = repository.fetchVodList(
+                                    baseUrl = source.url,
+                                    pg = 1,
+                                    categoryId = null,
+                                    keyword = query
+                                )
+                                res.list?.forEach { item ->
+                                    item.apiSourceUrl = source.url
+                                    item.apiSourceName = source.name
+                                }
+                                res
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                                null
+                            }
+                        }
+                    }
+                    val completed = deferredRes.awaitAll().filterNotNull()
+                    val mergedList = completed.flatMap { it.list ?: emptyList() }
+                    
+                    val mergedResponse = MaccmsResponse(
+                        code = 1,
+                        msg = "Merged search results",
+                        page = 1,
+                        pagecount = 1,
+                        limit = mergedList.size,
+                        total = mergedList.size,
+                        list = mergedList,
+                        classList = emptyList()
+                    )
+                    _uiState.value = MovieUiState.Success(mergedResponse)
+                } else {
+                    val source = repository.getActiveSource() ?: return@launch
+                    val response = repository.fetchVodList(
+                        baseUrl = source.url,
+                        pg = currentPage.value,
+                        categoryId = selectedCategory.value?.typeId,
+                        keyword = null
+                    )
+                    
+                    response.list?.forEach { item ->
+                        item.apiSourceUrl = source.url
+                        item.apiSourceName = source.name
+                    }
+                    
+                    // Keep loaded categories in VM state so category picker has them
+                    response.classList?.let { list ->
+                        if (list.isNotEmpty()) {
+                            _categories.value = list
+                        }
+                    }
+                    _uiState.value = MovieUiState.Success(response)
                 }
-                
-                _uiState.value = MovieUiState.Success(response)
             } catch (e: Exception) {
                 e.printStackTrace()
                 _uiState.value = MovieUiState.Error(e.localizedMessage ?: "数据加载失败，请检查网络或更换源")

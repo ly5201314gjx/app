@@ -30,7 +30,9 @@ data class VodItem(
     @Json(name = "vod_play_url") val vodPlayUrl: String? = null,
     @Json(name = "vod_sub") val vodSub: String? = null,
     @Json(name = "vod_year") val vodYear: String? = null,
-    @Json(name = "vod_area") val vodArea: String? = null
+    @Json(name = "vod_area") val vodArea: String? = null,
+    @Transient var apiSourceUrl: String? = null,
+    @Transient var apiSourceName: String? = null
 ) {
     // Utility to parse play URLs
     // e.g. "第1集$http://link1#第2集$http://link2"

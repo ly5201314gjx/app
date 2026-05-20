@@ -31,7 +31,7 @@ abstract class AppDatabase : RoomDatabase() {
                         CoroutineScope(Dispatchers.IO).launch {
                             val defaultSource = ApiSource(
                                 url = "https://cj.lziapi.com/api.php/provide/vod/",
-                                name = "默认亮子极速",
+                                name = "1号 极速秒播专线",
                                 isDefault = true,
                                 isActive = true
                             )

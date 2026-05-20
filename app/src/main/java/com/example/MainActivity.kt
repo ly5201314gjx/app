@@ -74,7 +74,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalAnimationApi::class)
 @Composable
 fun MovieMainScreen() {
     val viewModel: MovieViewModel = viewModel()
@@ -120,11 +120,14 @@ fun MovieMainScreen() {
         modifier = Modifier.fillMaxSize(),
         containerColor = Color.Transparent
     ) { innerPadding ->
+        val topPadding = if (innerPadding.calculateTopPadding() > 14.dp) innerPadding.calculateTopPadding() - 14.dp else 0.dp
+        val bottomPadding = if (innerPadding.calculateBottomPadding() > 14.dp) innerPadding.calculateBottomPadding() - 14.dp else 0.dp
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(gradientBackground)
-                .padding(innerPadding)
+                .padding(top = topPadding, bottom = bottomPadding)
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 if (activePlayingUrl != null) {
@@ -135,39 +138,60 @@ fun MovieMainScreen() {
                     )
                 }
 
-                if (selectedVod != null) {
-                    VodDetailsSection(
-                        vod = selectedVod!!,
-                        isFav = favoriteIds.contains(selectedVod!!.vodId),
-                        onToggleFav = { viewModel.toggleFavorite(selectedVod!!) },
-                        onBack = { viewModel.selectedVod.value = null },
-                        onPlayEpisode = { ep ->
-                            viewModel.activePlayingUrl.value = ep.url
-                            viewModel.activePlayingTitle.value = "${selectedVod!!.vodName} - ${ep.name}"
+                AnimatedContent(
+                    targetState = selectedVod,
+                    transitionSpec = {
+                        if (targetState != null) {
+                            ContentTransform(
+                                targetContentEnter = slideInVertically(initialOffsetY = { it / 2 }) + fadeIn(animationSpec = tween(300, easing = LinearEasing)),
+                                initialContentExit = fadeOut(animationSpec = tween(200, easing = LinearEasing))
+                            )
+                        } else {
+                            ContentTransform(
+                                targetContentEnter = slideInVertically(initialOffsetY = { -it / 2 }) + fadeIn(animationSpec = tween(300, easing = LinearEasing)),
+                                initialContentExit = fadeOut(animationSpec = tween(200, easing = LinearEasing))
+                            )
                         }
-                    )
-                } else {
-                    HomeBrowsingDashboard(
-                        activeSourceName = activeSource?.name ?: "默认极速源",
-                        showFavoritesOnly = showFavoritesOnly,
-                        onToggleFavorites = { viewModel.showFavoritesOnly.value = !showFavoritesOnly },
-                        searchQuery = searchQuery,
-                        onSearch = { viewModel.search(it) },
-                        onClearSearch = { viewModel.clearSearch() },
-                        onTriggerCategory = { viewModel.showCategoryDialog.value = true },
-                        onTriggerSource = { viewModel.showSourceDialog.value = true },
-                        selectedCategoryName = selectedCategory?.typeName ?: "全部分类",
-                        uiState = uiState,
-                        favorites = favorites,
-                        favoriteIds = favoriteIds,
-                        onToggleFav = { viewModel.toggleFavorite(it) },
-                        onSelectVod = { viewModel.selectedVod.value = it },
-                        currentPage = currentPage,
-                        onPageChange = { viewModel.changePage(it) },
-                        onSelectFavoriteVod = { fav ->
-                            viewModel.selectAndFetchDetails(fav.vodId, fav.vodName)
-                        }
-                    )
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                    label = "DetailsTransition"
+                ) { targetVod ->
+                    if (targetVod != null) {
+                        VodDetailsSection(
+                            vod = targetVod,
+                            isFav = favoriteIds.contains(targetVod.vodId),
+                            onToggleFav = { viewModel.toggleFavorite(targetVod) },
+                            onBack = { viewModel.selectedVod.value = null },
+                            onPlayEpisode = { ep ->
+                                viewModel.activePlayingUrl.value = ep.url
+                                viewModel.activePlayingTitle.value = "${targetVod.vodName} - ${ep.name}"
+                            }
+                        )
+                    } else {
+                        HomeBrowsingDashboard(
+                            activeSourceName = activeSource?.name ?: "1号 极速秒播专线",
+                            showFavoritesOnly = showFavoritesOnly,
+                            onToggleFavorites = { viewModel.showFavoritesOnly.value = !showFavoritesOnly },
+                            searchQuery = searchQuery,
+                            onSearch = { viewModel.search(it) },
+                            onClearSearch = { viewModel.clearSearch() },
+                            onTriggerCategory = { viewModel.showCategoryDialog.value = true },
+                            onTriggerSource = { viewModel.showSourceDialog.value = true },
+                            selectedCategoryName = selectedCategory?.typeName ?: "全部分类",
+                            uiState = uiState,
+                            favorites = favorites,
+                            favoriteIds = favoriteIds,
+                            onToggleFav = { viewModel.toggleFavorite(it) },
+                            onSelectVod = { item ->
+                                viewModel.selectAndFetchDetails(item.vodId, item.vodName, item.apiSourceUrl)
+                            },
+                            currentPage = currentPage,
+                            onPageChange = { viewModel.changePage(it) },
+                            onSelectFavoriteVod = { fav ->
+                                viewModel.selectAndFetchDetails(fav.vodId, fav.vodName, fav.apiSourceUrl)
+                            }
+                        )
+                    }
                 }
             }
 
@@ -217,94 +241,11 @@ fun HomeBrowsingDashboard(
     currentPage: Int,
     onPageChange: (Int) -> Unit
 ) {
-    Column(modifier = Modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 18.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                // Glass concentric glowing emblem
-                Box(
-                    modifier = Modifier
-                        .size(46.dp)
-                        .clip(CircleShape)
-                        .background(Color(0x33FFFFFF))
-                        .border(1.dp, Color.White.copy(0.7f), CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(28.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFFFCA524).copy(0.2f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.AutoAwesome,
-                            contentDescription = "Core Logo",
-                            tint = Color(0xFFFCA524),
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                    // Embedded breathing green live status dot
-                    Box(
-                        modifier = Modifier
-                            .size(10.dp)
-                            .align(Alignment.BottomEnd)
-                            .background(Color(0xFF4CAF50), CircleShape)
-                            .border(1.5.dp, Color.White, CircleShape)
-                    )
-                }
-                Spacer(modifier = Modifier.width(12.dp))
-                Column {
-                    Surface(
-                        color = Color(0x66FFFFFF),
-                        shape = RoundedCornerShape(10.dp),
-                        border = BorderStroke(0.5.dp, Color.White.copy(0.5f))
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.CloudSync,
-                                contentDescription = null,
-                                tint = Color(0xFFE4703C),
-                                modifier = Modifier.size(10.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = activeSourceName,
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = Color(0xFF24201A)
-                            )
-                        }
-                    }
-                }
-            }
-            if (searchQuery.isNotBlank()) {
-                Surface(
-                    onClick = onClearSearch,
-                    shape = RoundedCornerShape(12.dp),
-                    color = Color(0xCCFFEBEE),
-                    border = BorderStroke(1.dp, Color(0xFFFFCDD2))
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Default.Close, contentDescription = "清除", modifier = Modifier.size(11.dp), tint = Color(0xFFD32F2F))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("重置检索", fontSize = 10.sp, color = Color(0xFFD32F2F), fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-        }
-
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(top = 10.dp)
+    ) {
         TopFunctionsBar(
             searchQuery = searchQuery,
             onSearch = onSearch,
@@ -315,6 +256,41 @@ fun HomeBrowsingDashboard(
             onToggleFavorites = onToggleFavorites,
             onTriggerSource = onTriggerSource
         )
+
+        AnimatedVisibility(
+            visible = searchQuery.isNotBlank(),
+            enter = expandVertically(expandFrom = Alignment.Top) + fadeIn(),
+            exit = shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut(),
+            modifier = Modifier
+                .align(Alignment.CenterHorizontally)
+                .padding(top = 6.dp, bottom = 2.dp)
+        ) {
+            Surface(
+                onClick = onClearSearch,
+                shape = RoundedCornerShape(12.dp),
+                color = Color(0xCCFFEBEE),
+                border = BorderStroke(1.dp, Color(0xFFFFCDD2).copy(alpha = 0.5f))
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "重置检索",
+                        modifier = Modifier.size(12.dp),
+                        tint = Color(0xFFD32F2F)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "过滤内容中: \"$searchQuery\" [点击清空]",
+                        fontSize = 11.sp,
+                        color = Color(0xFFD32F2F),
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
 
         Spacer(modifier = Modifier.height(10.dp))
 
@@ -467,55 +443,58 @@ fun TopFunctionsBar(
             .padding(horizontal = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // High-end minimalist micro glass capsule dock, centered and compact
-        Box(
-            modifier = Modifier
-                .fillMaxWidth(0.85f)
-                .clip(RoundedCornerShape(22.dp))
-                .background(Color(0xD9FAF7F2)) // Rich light-creamy frosted glass dock
-                .border(
-                    width = 1.dp,
-                    brush = Brush.linearGradient(listOf(Color.White, Color.White.copy(alpha = 0.2f))),
-                    shape = RoundedCornerShape(22.dp)
-                )
-                .padding(horizontal = 10.dp, vertical = 6.dp)
+        // High-end minimalist human-centric custom control panel
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            color = Color(0x99FFFFFF), // Elegant satin white frosted glass
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.5f))
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 6.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Button 1: Search Glass Icon
-                GlassDockIconButton(
+                // Button 1: Search Console
+                TactileFuncButton(
                     icon = Icons.Default.Search,
+                    label = if (searchQuery.isNotBlank()) "检索中" else "搜影片",
                     selected = isSearchingOpen || searchQuery.isNotBlank(),
                     onClick = { isSearchingOpen = !isSearchingOpen },
-                    colorTint = Color(0xFF00E5FF)
+                    activeColor = Color(0xFF1976D2),
+                    modifier = Modifier.weight(1f)
                 )
 
-                // Button 2: Category Widgets Custom Dial
-                GlassDockIconButton(
-                    icon = Icons.Default.Widgets,
+                // Button 2: Category Picker
+                TactileFuncButton(
+                    icon = Icons.Default.FilterList,
+                    label = if (selectedCategoryName != "全部分类") selectedCategoryName else "选分类",
                     selected = selectedCategoryName != "全部分类",
-                    badgeText = if (selectedCategoryName != "全部分类") selectedCategoryName else null,
                     onClick = onTriggerCategory,
-                    colorTint = Color(0xFFFCA524)
+                    activeColor = Color(0xFFF57C00),
+                    modifier = Modifier.weight(1f)
                 )
 
-                // Button 3: Heartbeat Favs Console
-                GlassDockIconButton(
+                // Button 3: Favorites Toggle
+                TactileFuncButton(
                     icon = if (showFavoritesOnly) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                    label = "看收藏",
                     selected = showFavoritesOnly,
                     onClick = onToggleFavorites,
-                    colorTint = Color(0xFFFF5252)
+                    activeColor = Color(0xFFD32F2F),
+                    modifier = Modifier.weight(1f)
                 )
 
-                // Button 4: Central Connection Router (Change Source)
-                GlassDockIconButton(
+                // Button 4: Change Source Line
+                TactileFuncButton(
                     icon = Icons.Default.Dns,
+                    label = "换专线",
                     selected = false,
                     onClick = onTriggerSource,
-                    colorTint = Color(0xFFE4703C)
+                    activeColor = Color(0xFF388E3C),
+                    modifier = Modifier.weight(1f)
                 )
             }
         }
@@ -561,7 +540,7 @@ fun TopFunctionsBar(
                                 onClick = { onSearch(localSearchText.trim()) },
                                 modifier = Modifier
                                     .size(32.dp)
-                                    .background(Color(0xFFFCA524), CircleShape)
+                                    .background(Color(0xFFE4703C), CircleShape)
                             ) {
                                 Icon(Icons.Default.Search, contentDescription = "搜索", tint = Color.White, modifier = Modifier.size(14.dp))
                             }
@@ -575,13 +554,58 @@ fun TopFunctionsBar(
                         onSearch = { onSearch(localSearchText.trim()) }
                     ),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Color(0xFFFCA524),
+                        focusedBorderColor = Color(0xFFE4703C),
                         unfocusedBorderColor = Color.Transparent,
-                        focusedContainerColor = Color(0x33FFFFFF),
-                        unfocusedContainerColor = Color(0x33FFFFFF)
+                        focusedContainerColor = Color(0x1A000000),
+                        unfocusedContainerColor = Color(0x1A000000)
                     )
                 )
             }
+        }
+    }
+}
+
+@Composable
+fun TactileFuncButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    activeColor: Color,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(12.dp),
+        color = if (selected) activeColor.copy(alpha = 0.12f) else Color.Transparent,
+        border = BorderStroke(
+            width = 1.dp,
+            color = if (selected) activeColor.copy(alpha = 0.4f) else Color.Transparent
+        ),
+        modifier = modifier.height(38.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 2.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = if (selected) activeColor else Color(0xFF4A3E31),
+                modifier = Modifier.size(15.dp)
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(
+                text = label,
+                fontSize = 11.sp,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                color = if (selected) activeColor else Color(0xFF4A3E31),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
@@ -661,8 +685,8 @@ fun HeadlineSpotlightCard(
     onToggleFav: () -> Unit,
     onClick: () -> Unit
 ) {
-    var visibleState by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
+    var visibleState by remember(vod.vodId) { mutableStateOf(false) }
+    LaunchedEffect(vod.vodId) {
         visibleState = true
     }
     val animatedAlpha by animateFloatAsState(
@@ -862,8 +886,8 @@ fun VodGridCard(
     isAlteredStyle: Boolean = false
 ) {
     // Elegant entrance rise animation
-    var visibleState by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
+    var visibleState by remember(vod.vodId) { mutableStateOf(false) }
+    LaunchedEffect(vod.vodId) {
         visibleState = true
     }
     
@@ -1569,6 +1593,25 @@ fun VodDetailsSection(
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 
+                if (!vod.apiSourceName.isNullOrBlank()) {
+                    Box(
+                        modifier = Modifier
+                            .padding(top = 4.dp, bottom = 2.dp)
+                            .background(
+                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
+                                shape = RoundedCornerShape(4.dp)
+                            )
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "源: ${vod.apiSourceName}",
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+                
                 if (!vod.vodRemarks.isNullOrBlank()) {
                     Text(
                         text = vod.vodRemarks,
@@ -1840,21 +1883,30 @@ fun EmbeddedVideoSection(
                         }
                     },
                     update = { view ->
-                        if (url.endsWith(".m3u8") || url.contains(".m3u8")) {
-                            val template = getHlsHtmlTemplate(url)
-                            // Use stream base host domain instead of file .m3u8 URL to preserve relative segment resolutions and bypass CORS blockages
-                            val hostBaseUrl = try {
-                                val uri = Uri.parse(url)
-                                val scheme = uri.scheme ?: "https"
-                                val host = uri.host ?: ""
-                                val port = if (uri.port != -1) ":${uri.port}" else ""
-                                "$scheme://$host$port/"
-                            } catch (e: Exception) {
-                                "https://cdnjs.cloudflare.com"
+                        val loadedUrl = view.tag as? String
+                        if (loadedUrl != url) {
+                            view.tag = url
+                            if (url.endsWith(".m3u8") || url.contains(".m3u8")) {
+                                val template = getHlsHtmlTemplate(url)
+                                // Extract the precise parent dir or domain to bypass CORS/404 issues on relative files
+                                val hostBaseUrl = try {
+                                    val lastSlash = url.lastIndexOf('/')
+                                    if (lastSlash != -1) {
+                                        url.substring(0, lastSlash + 1)
+                                    } else {
+                                        val uri = Uri.parse(url)
+                                        val scheme = uri.scheme ?: "https"
+                                        val host = uri.host ?: ""
+                                        val port = if (uri.port != -1) ":${uri.port}" else ""
+                                        "$scheme://$host$port/"
+                                    }
+                                } catch (e: Exception) {
+                                    "https://cdn.jsdelivr.net"
+                                }
+                                view.loadDataWithBaseURL(hostBaseUrl, template, "text/html", "utf-8", null)
+                            } else {
+                                view.loadUrl(url)
                             }
-                            view.loadDataWithBaseURL(hostBaseUrl, template, "text/html", "utf-8", null)
-                        } else {
-                            view.loadUrl(url)
                         }
                     },
                     modifier = Modifier.fillMaxSize()
@@ -1933,7 +1985,18 @@ fun getHlsHtmlTemplate(m3u8Url: String): String {
                 body, html { margin:0; padding:0; width:100%; height:100%; background-color:#000; overflow:hidden; display:flex; justify-content:center; align-items:center; }
                 video { width:100%; height:100%; object-fit:contain; outline:none; cursor: pointer; }
             </style>
-            <script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.4.12/hls.min.js"></script>
+            <!-- High-speed Multi-CDN failover loading chain -->
+            <script src="https://cdn.jsdelivr.net/npm/hls.js@1.4.12/dist/hls.min.js"></script>
+            <script>
+                if (typeof Hls === 'undefined') {
+                    document.write('<script src="https://unpkg.com/hls.js@1.4.12/dist/hls.min.js"><\/script>');
+                }
+            </script>
+            <script>
+                if (typeof Hls === 'undefined') {
+                    document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.4.12/hls.min.js"><\/script>');
+                }
+            </script>
         </head>
         <body>
             <video id="video" window-playsinline playsinline autoplay controls style="width:100%; height:100%;"></video>
@@ -1955,44 +2018,49 @@ fun getHlsHtmlTemplate(m3u8Url: String): String {
                     }
                 }, { once: true });
 
-                if (typeof Hls !== 'undefined' && Hls.isSupported()) {
-                    var hls = new Hls({
-                        enableWorker: true,
-                        lowLatencyMode: true,
-                        maxMaxBufferLength: 30,
-                        backBufferLength: 10
-                    });
-                    
-                    hls.loadSource(videoSrc);
-                    hls.attachMedia(video);
-                    
-                    hls.on(Hls.Events.MANIFEST_PARSED, function() {
-                        video.play().catch(function(err) {
-                            console.log("Autoplay blocked, waiting interaction: ", err);
+                function initPlayer() {
+                    if (typeof Hls !== 'undefined' && Hls.isSupported()) {
+                        var hls = new Hls({
+                            enableWorker: true,
+                            lowLatencyMode: true,
+                            maxMaxBufferLength: 30,
+                            backBufferLength: 10
                         });
-                    });
-                    
-                    hls.on(Hls.Events.ERROR, function(event, data) {
-                        if (data.fatal) {
-                            switch (data.type) {
-                                case Hls.ErrorTypes.NETWORK_ERROR:
-                                    console.log("Network error fatal, retrying...");
-                                    hls.startLoad();
-                                    break;
-                                case Hls.ErrorTypes.MEDIA_ERROR:
-                                    console.log("Media error fatal, recovering...");
-                                    hls.recoverMediaError();
-                                    break;
-                                default:
-                                    console.log("Fatal crash, switching engine play");
-                                    playOrFallback();
-                                    break;
+                        
+                        hls.loadSource(videoSrc);
+                        hls.attachMedia(video);
+                        
+                        hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                            video.play().catch(function(err) {
+                                console.log("Autoplay blocked, waiting interaction: ", err);
+                            });
+                        });
+                        
+                        hls.on(Hls.Events.ERROR, function(event, data) {
+                            if (data.fatal) {
+                                switch (data.type) {
+                                    case Hls.ErrorTypes.NETWORK_ERROR:
+                                        console.log("Network error fatal, retrying...");
+                                        hls.startLoad();
+                                        break;
+                                    case Hls.ErrorTypes.MEDIA_ERROR:
+                                        console.log("Media error fatal, recovering...");
+                                        hls.recoverMediaError();
+                                        break;
+                                    default:
+                                        console.log("Fatal crash, switching engine play");
+                                        playOrFallback();
+                                        break;
+                                }
                             }
-                        }
-                    });
-                } else {
-                    playOrFallback();
+                        });
+                    } else {
+                        playOrFallback();
+                    }
                 }
+
+                // Small delay to ensure any doc.write async loads execute
+                setTimeout(initPlayer, 100);
             </script>
         </body>
         </html>
@@ -2200,6 +2268,9 @@ fun EmptyPlaceholder(
 
 @Composable
 fun FooterSection() {
+    val context = LocalContext.current
+    var showDisclaimer by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -2211,11 +2282,12 @@ fun FooterSection() {
             modifier = Modifier
                 .clip(CircleShape)
                 .background(Color(0x0A000000))
+                .clickable { showDisclaimer = true }
                 .padding(horizontal = 10.dp, vertical = 4.dp)
         ) {
             Icon(
                 imageVector = Icons.Default.Info,
-                contentDescription = null,
+                contentDescription = "查看免责及源码地址",
                 tint = Color(0x6624201A),
                 modifier = Modifier.size(10.dp)
             )
@@ -2226,6 +2298,153 @@ fun FooterSection() {
                 fontWeight = FontWeight.Bold,
                 color = Color(0x6624201A)
             )
+        }
+    }
+
+    if (showDisclaimer) {
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { showDisclaimer = false }
+        ) {
+            var isDialogVisible by remember { mutableStateOf(false) }
+            LaunchedEffect(Unit) {
+                isDialogVisible = true
+            }
+
+            AnimatedVisibility(
+                visible = isDialogVisible,
+                enter = fadeIn(animationSpec = tween(280)) + scaleIn(initialScale = 0.92f, animationSpec = spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessMediumLow)),
+                exit = fadeOut(animationSpec = tween(150)) + scaleOut(targetScale = 0.92f)
+            ) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth(0.95f)
+                        .height(390.dp)
+                        .border(1.dp, Color.White.copy(0.4f), RoundedCornerShape(24.dp)),
+                    shape = RoundedCornerShape(24.dp),
+                    color = Color(0xF0FAF7F2),
+                    tonalElevation = 6.dp
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(20.dp)
+                    ) {
+                        // Title bar
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Info,
+                                    contentDescription = null,
+                                    tint = Color(0xFFE4703C),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "关于本项目及源码",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF24201A)
+                                )
+                            }
+
+                            IconButton(
+                                onClick = { showDisclaimer = false },
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "关闭",
+                                    tint = Color(0x9924201A),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Scrollable content pane for the repo address & disclaimers
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth()
+                                .background(Color(0x33FFFFFF), RoundedCornerShape(12.dp))
+                                .border(0.5.dp, Color(0xFFE2D6C5).copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+                                .verticalScroll(rememberScrollState())
+                                .padding(12.dp)
+                        ) {
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Text(
+                                    text = "开源仓库地址 (点击自动复制)",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFD84315)
+                                )
+                                
+                                Surface(
+                                    color = Color(0x0D000000),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            try {
+                                                val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                                val clip = android.content.ClipData.newPlainText("repo_url", "https://github.com/gjxly0304/VodPlayer")
+                                                clipboard.setPrimaryClip(clip)
+                                                android.widget.Toast.makeText(context, "仓库地址已复制到剪贴板", android.widget.Toast.LENGTH_SHORT).show()
+                                            } catch (e: Exception) {
+                                                // Clipboard fallback
+                                            }
+                                        }
+                                ) {
+                                    Text(
+                                        text = "https://github.com/gjxly0304/VodPlayer",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Color(0xFF1976D2),
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
+                                    )
+                                }
+
+                                Text(
+                                    text = "免责声明及项目说明",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF24201A)
+                                )
+
+                                Text(
+                                    text = "1. 本项目属于完全开源的 Android 高性能影视检索与播放实验工具，初衷是进行 Jetpack Compose 技术路线深海化测试和 HLS 离线码流探查。\n\n" +
+                                           "2. 本项目不提供、不存储任何音视频影视载体，亦无任何人工录制或服务内容转传中介行为。\n\n" +
+                                           "3. 所有呈现在界面上的封面、详情及在线流。均来自公开的第三方 MacCMS 平台开放源数据接口准实时读取及网页注入，属于常规的工具形态多功能浏览器导航。\n\n" +
+                                           "4. 用户需遵守所在地的版权与法规规范合理行使检索。如有任何侵权或涉嫌违法信息，请径直联系原视频存储分发云商，本软件仅配合主流规范阻隔底层解析接口。\n\n" +
+                                           "5. 本系统不收取任何注册费用或包含隐性收费，任何因为二次销售或违规运营造成的纠纷，本项目均不承担任何连带担保或法律责任。",
+                                    fontSize = 11.sp,
+                                    color = Color(0xFF4A3E31),
+                                    lineHeight = 16.sp
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Footer Action button
+                        Button(
+                            onClick = { showDisclaimer = false },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFFE4703C)
+                            )
+                        ) {
+                            Text("已知悉并同意", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        }
+                    }
+                }
+            }
         }
     }
 }

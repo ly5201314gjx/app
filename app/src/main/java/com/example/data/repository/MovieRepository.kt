@@ -59,11 +59,11 @@ class MovieRepository(
         val missingUrls = defaultUrls.filter { url -> sources.none { it.url == url } }
         if (missingUrls.isNotEmpty()) {
             val defaults = listOf(
-                ApiSource("https://cj.lziapi.com/api.php/provide/vod/", "亮子极速专线 [秒播]", isDefault = true, isActive = true),
-                ApiSource("https://cj.ffzyapi.com/api.php/provide/vod/", "非凡高清专线 [HD]", isDefault = true, isActive = false),
-                ApiSource("https://suoniapi.com/api.php/provide/vod/", "索尼臻彩专线 [4K]", isDefault = true, isActive = false),
-                ApiSource("https://cj.jyzyapi.com/api.php/provide/vod/", "金鹰优质专线 [推荐]", isDefault = true, isActive = false),
-                ApiSource("https://cj.speedbyg.com/api.php/provide/vod/", "快播爆速专线 [極速]", isDefault = true, isActive = false)
+                ApiSource("https://cj.lziapi.com/api.php/provide/vod/", "1号 极速秒播专线", isDefault = true, isActive = true),
+                ApiSource("https://cj.ffzyapi.com/api.php/provide/vod/", "2号 非凡高清专线", isDefault = true, isActive = false),
+                ApiSource("https://suoniapi.com/api.php/provide/vod/", "3号 索尼臻彩专线", isDefault = true, isActive = false),
+                ApiSource("https://cj.jyzyapi.com/api.php/provide/vod/", "4号 金鹰优质专线", isDefault = true, isActive = false),
+                ApiSource("https://cj.speedbyg.com/api.php/provide/vod/", "5号 快播硬核专线", isDefault = true, isActive = false)
             )
             val toInsert = defaults.filter { missingUrls.contains(it.url) }
             val activeExists = sources.any { it.isActive }
