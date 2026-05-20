@@ -41,12 +41,13 @@ private val LightColorScheme = lightColorScheme(
 
 @Composable
 fun MyApplicationTheme(
-  darkTheme: Boolean = isSystemInDarkTheme(),
+  darkTheme: Boolean = false,
   // Force our custom cinematic styling by default
   dynamicColor: Boolean = false,
   content: @Composable () -> Unit,
 ) {
-  val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
+  // Always use our custom LightColorScheme for a vibrant, bright, high-end look
+  val colorScheme = LightColorScheme
 
   MaterialTheme(
     colorScheme = colorScheme,

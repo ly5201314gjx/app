@@ -48,15 +48,34 @@ class MovieRepository(
     val activeSourceFlow: Flow<ApiSource?> = apiSourceDao.getActiveSourceFlow()
 
     suspend fun ensureDefaultSource() = withContext(Dispatchers.IO) {
-        val sources = apiSourceDao.getAllSources().firstOrNull()
-        if (sources.isNullOrEmpty()) {
-            val defaultSource = ApiSource(
-                url = "https://cj.lziapi.com/api.php/provide/vod/",
-                name = "默认亮子极速",
-                isDefault = true,
-                isActive = true
+        val sources = apiSourceDao.getAllSources().firstOrNull() ?: emptyList()
+        val defaultUrls = listOf(
+            "https://cj.lziapi.com/api.php/provide/vod/",
+            "https://cj.ffzyapi.com/api.php/provide/vod/",
+            "https://suoniapi.com/api.php/provide/vod/",
+            "https://cj.jyzyapi.com/api.php/provide/vod/",
+            "https://cj.speedbyg.com/api.php/provide/vod/"
+        )
+        val missingUrls = defaultUrls.filter { url -> sources.none { it.url == url } }
+        if (missingUrls.isNotEmpty()) {
+            val defaults = listOf(
+                ApiSource("https://cj.lziapi.com/api.php/provide/vod/", "亮子极速专线 [秒播]", isDefault = true, isActive = true),
+                ApiSource("https://cj.ffzyapi.com/api.php/provide/vod/", "非凡高清专线 [HD]", isDefault = true, isActive = false),
+                ApiSource("https://suoniapi.com/api.php/provide/vod/", "索尼臻彩专线 [4K]", isDefault = true, isActive = false),
+                ApiSource("https://cj.jyzyapi.com/api.php/provide/vod/", "金鹰优质专线 [推荐]", isDefault = true, isActive = false),
+                ApiSource("https://cj.speedbyg.com/api.php/provide/vod/", "快播爆速专线 [極速]", isDefault = true, isActive = false)
             )
-            apiSourceDao.insertSource(defaultSource)
+            val toInsert = defaults.filter { missingUrls.contains(it.url) }
+            val activeExists = sources.any { it.isActive }
+            
+            toInsert.forEach { source ->
+                val finalSource = if (activeExists && source.isActive) {
+                    source.copy(isActive = false)
+                } else {
+                    source
+                }
+                apiSourceDao.insertSource(finalSource)
+            }
         }
     }
 
@@ -107,6 +126,8 @@ class MovieRepository(
         val options = mutableMapOf<String, String>()
         options["ac"] = "detail"
         options["pg"] = pg.toString()
+        options["pagesize"] = "40"
+        options["limit"] = "40"
         
         if (categoryId != null) {
             options["t"] = categoryId.toString()
@@ -116,6 +137,16 @@ class MovieRepository(
             options["wd"] = keyword.trim()
         }
 
+        maccmsService.getVodData(baseUrl, options)
+    }
+
+    suspend fun fetchVodDetails(
+        baseUrl: String,
+        vodId: Int
+    ): MaccmsResponse = withContext(Dispatchers.IO) {
+        val options = mutableMapOf<String, String>()
+        options["ac"] = "detail"
+        options["ids"] = vodId.toString()
         maccmsService.getVodData(baseUrl, options)
     }
 }

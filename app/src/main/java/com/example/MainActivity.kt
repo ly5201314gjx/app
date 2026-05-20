@@ -12,6 +12,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -21,6 +22,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -36,8 +38,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.*
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -106,10 +107,12 @@ fun MovieMainScreen() {
         }
     }
 
-    val gradientBackground = Brush.verticalGradient(
+    val gradientBackground = Brush.linearGradient(
         colors = listOf(
-            Color(0xFF0F0B09), // 深黑色顶
-            Color(0xFF1E1815)  // 暖炭灰色底
+            Color(0xFFFAF7F2), // Sophisticated oat/cream
+            Color(0xFFF3EDE3), // Silky linen sand
+            Color(0xFFECEBF5), // Delicate Lavender tint
+            Color(0xFFE5F0EC)  // Gentle soft mint dew
         )
     )
 
@@ -162,20 +165,7 @@ fun MovieMainScreen() {
                         currentPage = currentPage,
                         onPageChange = { viewModel.changePage(it) },
                         onSelectFavoriteVod = { fav ->
-                            val tempVod = VodItem(
-                                vodId = fav.vodId,
-                                vodName = fav.vodName,
-                                vodPic = fav.vodPic,
-                                vodRemarks = fav.vodRemarks,
-                                typeName = fav.typeName,
-                                vodPlayUrl = "", 
-                                vodPlayFrom = "",
-                                vodContent = "本地已收藏。集数将为您在当前激活的数据API源中自动在线拉取匹配。"
-                            )
-                            viewModel.selectedVod.value = tempVod
-                            viewModel.searchQuery.value = fav.vodName
-                            viewModel.loadMovies()
-                            Toast.makeText(context, "已在当前API源加载 \"${fav.vodName}\" 实时集数", Toast.LENGTH_SHORT).show()
+                            viewModel.selectAndFetchDetails(fav.vodId, fav.vodName)
                         }
                     )
                 }
@@ -194,7 +184,10 @@ fun MovieMainScreen() {
                 SourceManagementDialog(
                     activeSource = activeSource,
                     sources = apiSources,
-                    onSelectSource = { viewModel.selectApiSource(it) },
+                    onSelectSource = { 
+                        viewModel.selectApiSource(it)
+                        viewModel.showSourceDialog.value = false
+                    },
                     onAddSource = { name, url -> viewModel.addCustomSource(name, url) },
                     onDeleteSource = { viewModel.deleteApiSource(it) },
                     onDismiss = { viewModel.showSourceDialog.value = false }
@@ -228,42 +221,86 @@ fun HomeBrowsingDashboard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp),
+                .padding(horizontal = 20.dp, vertical = 18.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Column {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Glass concentric glowing emblem
+                Box(
+                    modifier = Modifier
+                        .size(46.dp)
+                        .clip(CircleShape)
+                        .background(Color(0x33FFFFFF))
+                        .border(1.dp, Color.White.copy(0.7f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
                     Box(
                         modifier = Modifier
-                            .size(7.dp)
-                            .background(Color(0xFF4CAF50), CircleShape) // 绿色状态点
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "星辰影视 PRO",
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = MaterialTheme.colorScheme.primary,
-                        letterSpacing = 0.5.sp
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFFFCA524).copy(0.2f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AutoAwesome,
+                            contentDescription = "Core Logo",
+                            tint = Color(0xFFFCA524),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    // Embedded breathing green live status dot
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .align(Alignment.BottomEnd)
+                            .background(Color(0xFF4CAF50), CircleShape)
+                            .border(1.5.dp, Color.White, CircleShape)
                     )
                 }
-                Text(
-                    text = "当前专线: $activeSourceName",
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                    modifier = Modifier.padding(top = 2.dp)
-                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column {
+                    Surface(
+                        color = Color(0x66FFFFFF),
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(0.5.dp, Color.White.copy(0.5f))
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CloudSync,
+                                contentDescription = null,
+                                tint = Color(0xFFE4703C),
+                                modifier = Modifier.size(10.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = activeSourceName,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color(0xFF24201A)
+                            )
+                        }
+                    }
+                }
             }
             if (searchQuery.isNotBlank()) {
-                FilledTonalButton(
+                Surface(
                     onClick = onClearSearch,
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                    colors = ButtonDefaults.filledTonalButtonColors(containerColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.2f))
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color(0xCCFFEBEE),
+                    border = BorderStroke(1.dp, Color(0xFFFFCDD2))
                 ) {
-                    Icon(Icons.Default.Close, contentDescription = "清除", modifier = Modifier.size(14.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("重置过滤", fontSize = 11.sp)
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = "清除", modifier = Modifier.size(11.dp), tint = Color(0xFFD32F2F))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("重置检索", fontSize = 10.sp, color = Color(0xFFD32F2F), fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         }
@@ -306,43 +343,84 @@ fun HomeBrowsingDashboard(
                     }
                 }
             } else {
-                when (uiState) {
-                    is MovieUiState.Loading -> {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-                        }
-                    }
-                    is MovieUiState.Error -> {
-                        EmptyPlaceholder(
-                            icon = Icons.Default.WifiOff,
-                            text = "${uiState.message}\n如长时不加载，请点击“极速换源”按钮更换其他线路API。"
-                        )
-                    }
-                    is MovieUiState.Success -> {
-                        val list = uiState.response.list ?: emptyList()
-                        if (list.isEmpty()) {
-                            EmptyPlaceholder(icon = Icons.Default.SearchOff, text = "未检索到相关资源")
-                        } else {
-                            LazyVerticalGrid(
-                                columns = GridCells.Fixed(2),
-                                verticalArrangement = Arrangement.spacedBy(10.dp),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                modifier = Modifier.fillMaxSize()
-                            ) {
-                                items(list) { item ->
-                                    VodGridCard(
-                                        vod = item,
-                                        isFav = favoriteIds.contains(item.vodId),
-                                        onToggleFav = { onToggleFav(item) },
-                                        onClick = { onSelectVod(item) }
+                AnimatedContent(
+                    targetState = uiState,
+                    transitionSpec = {
+                        fadeIn(animationSpec = spring(stiffness = Spring.StiffnessLow)) +
+                                slideInVertically(animationSpec = spring(stiffness = Spring.StiffnessLow)) { it / 6 } togetherWith
+                        fadeOut(animationSpec = spring(stiffness = Spring.StiffnessLow))
+                    },
+                    label = "DashboardState"
+                ) { state ->
+                    when (state) {
+                        is MovieUiState.Loading -> {
+                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    CircularProgressIndicator(
+                                        color = Color(0xFFFF9800),
+                                        strokeWidth = 4.dp,
+                                        modifier = Modifier.size(48.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    Text(
+                                        "正在穿越星轨，极速加载中...",
+                                        color = Color(0xFFB5AA9A),
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
                                     )
                                 }
                             }
                         }
-                    }
-                    MovieUiState.Idle -> {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text("等待激活接口数据...")
+                        is MovieUiState.Error -> {
+                            EmptyPlaceholder(
+                                icon = Icons.Default.WifiOff,
+                                text = "${state.message}\n如长时不加载，请点击“极速换源”按钮更换其他线路API。"
+                            )
+                        }
+                        is MovieUiState.Success -> {
+                            val list = state.response.list ?: emptyList()
+                            if (list.isEmpty()) {
+                                EmptyPlaceholder(icon = Icons.Default.SearchOff, text = "未检索到相关资源")
+                            } else {
+                                LazyVerticalGrid(
+                                    columns = GridCells.Fixed(2),
+                                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    modifier = Modifier.fillMaxSize()
+                                ) {
+                                    // 1. 今日首推精选 (spans both columns)
+                                    if (list.isNotEmpty()) {
+                                        item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(2) }) {
+                                            val firstItem = list.first()
+                                            HeadlineSpotlightCard(
+                                                vod = firstItem,
+                                                isFav = favoriteIds.contains(firstItem.vodId),
+                                                onToggleFav = { onToggleFav(firstItem) },
+                                                onClick = { onSelectVod(firstItem) }
+                                            )
+                                        }
+                                    }
+                                    
+                                    // 2. 多样式网格列表
+                                    if (list.size > 1) {
+                                        val remainingList = list.drop(1)
+                                        itemsIndexed(remainingList) { index, item ->
+                                            VodGridCard(
+                                                vod = item,
+                                                isFav = favoriteIds.contains(item.vodId),
+                                                onToggleFav = { onToggleFav(item) },
+                                                onClick = { onSelectVod(item) },
+                                                isAlteredStyle = (index % 3 == 0) // Alternating styles
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        MovieUiState.Idle -> {
+                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Text("等待激活接口数据...", color = Color(0xFFB5AA9A))
+                            }
                         }
                     }
                 }
@@ -378,88 +456,114 @@ fun TopFunctionsBar(
     
     LaunchedEffect(searchQuery) {
         localSearchText = searchQuery
+        if (searchQuery.isNotBlank()) {
+            isSearchingOpen = true
+        }
     }
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 14.dp)
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
-            .padding(10.dp)
+            .padding(horizontal = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
+        // High-end minimalist micro glass capsule dock, centered and compact
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.85f)
+                .clip(RoundedCornerShape(22.dp))
+                .background(Color(0xD9FAF7F2)) // Rich light-creamy frosted glass dock
+                .border(
+                    width = 1.dp,
+                    brush = Brush.linearGradient(listOf(Color.White, Color.White.copy(alpha = 0.2f))),
+                    shape = RoundedCornerShape(22.dp)
+                )
+                .padding(horizontal = 10.dp, vertical = 6.dp)
         ) {
-            FilterBadgeChip(
-                selected = isSearchingOpen || searchQuery.isNotBlank(),
-                icon = Icons.Default.Search,
-                label = if (searchQuery.isNotBlank()) "检索: $searchQuery" else "关键词/主演搜索",
-                onClick = { isSearchingOpen = !isSearchingOpen },
-                modifier = Modifier.weight(1f)
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Button 1: Search Glass Icon
+                GlassDockIconButton(
+                    icon = Icons.Default.Search,
+                    selected = isSearchingOpen || searchQuery.isNotBlank(),
+                    onClick = { isSearchingOpen = !isSearchingOpen },
+                    colorTint = Color(0xFF00E5FF)
+                )
 
-            FilterBadgeChip(
-                selected = selectedCategoryName != "全部分类",
-                icon = Icons.Default.Category,
-                label = selectedCategoryName,
-                onClick = onTriggerCategory,
-                modifier = Modifier.weight(1f)
-            )
+                // Button 2: Category Widgets Custom Dial
+                GlassDockIconButton(
+                    icon = Icons.Default.Widgets,
+                    selected = selectedCategoryName != "全部分类",
+                    badgeText = if (selectedCategoryName != "全部分类") selectedCategoryName else null,
+                    onClick = onTriggerCategory,
+                    colorTint = Color(0xFFFCA524)
+                )
+
+                // Button 3: Heartbeat Favs Console
+                GlassDockIconButton(
+                    icon = if (showFavoritesOnly) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                    selected = showFavoritesOnly,
+                    onClick = onToggleFavorites,
+                    colorTint = Color(0xFFFF5252)
+                )
+
+                // Button 4: Central Connection Router (Change Source)
+                GlassDockIconButton(
+                    icon = Icons.Default.Dns,
+                    selected = false,
+                    onClick = onTriggerSource,
+                    colorTint = Color(0xFFE4703C)
+                )
+            }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            FilterBadgeChip(
-                selected = showFavoritesOnly,
-                icon = if (showFavoritesOnly) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                label = "本地收藏夹",
-                onClick = onToggleFavorites,
-                modifier = Modifier.weight(1f)
-            )
-
-            FilterBadgeChip(
-                selected = false,
-                icon = Icons.Default.SwapHoriz,
-                label = "极速换源",
-                onClick = onTriggerSource,
-                modifier = Modifier.weight(1f)
-            )
-        }
-
+        // Animated drop-down glass-frosted input field
         AnimatedVisibility(
             visible = isSearchingOpen,
-            enter = expandVertically() + fadeIn(),
-            exit = shrinkVertically() + fadeOut()
+            enter = expandVertically(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) + fadeIn(),
+            exit = shrinkVertically(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) + fadeOut()
         ) {
-            Column(modifier = Modifier.padding(top = 10.dp)) {
+            Column(
+                modifier = Modifier
+                    .padding(top = 10.dp)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(Color(0x99FFFFFF)) // Mist panel
+                    .border(1.dp, Color.White.copy(alpha = 0.6f), RoundedCornerShape(18.dp))
+                    .padding(8.dp)
+            ) {
                 OutlinedTextField(
                     value = localSearchText,
                     onValueChange = { localSearchText = it },
-                    placeholder = { Text("搜索影片、导演、演员名称...", fontSize = 13.sp) },
+                    placeholder = { Text("搜索影片、导演、主演...", fontSize = 12.sp, color = Color(0xFF8C7F6E)) },
                     singleLine = true,
+                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, color = Color(0xFF24201A)),
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("search_field"),
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(14.dp),
                     trailingIcon = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 4.dp)) {
                             if (localSearchText.isNotBlank()) {
-                                IconButton(onClick = {
-                                    localSearchText = ""
-                                    onClear()
-                                }) {
-                                    Icon(Icons.Default.Clear, contentDescription = "清除")
+                                IconButton(
+                                    onClick = {
+                                        localSearchText = ""
+                                        onClear()
+                                    },
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Icon(Icons.Default.Clear, contentDescription = "清除", tint = Color(0xFF8C7F6E), modifier = Modifier.size(16.dp))
                                 }
                             }
-                            IconButton(onClick = { onSearch(localSearchText) }) {
-                                Icon(Icons.Default.Search, contentDescription = "点击搜索", tint = MaterialTheme.colorScheme.primary)
+                            IconButton(
+                                onClick = { onSearch(localSearchText.trim()) },
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .background(Color(0xFFFCA524), CircleShape)
+                            ) {
+                                Icon(Icons.Default.Search, contentDescription = "搜索", tint = Color.White, modifier = Modifier.size(14.dp))
                             }
                         }
                     },
@@ -468,12 +572,13 @@ fun TopFunctionsBar(
                         keyboardType = KeyboardType.Text
                     ),
                     keyboardActions = KeyboardActions(
-                        onSearch = { onSearch(localSearchText) }
+                        onSearch = { onSearch(localSearchText.trim()) }
                     ),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                        unfocusedContainerColor = MaterialTheme.colorScheme.background,
-                        focusedContainerColor = MaterialTheme.colorScheme.background
+                        focusedBorderColor = Color(0xFFFCA524),
+                        unfocusedBorderColor = Color.Transparent,
+                        focusedContainerColor = Color(0x33FFFFFF),
+                        unfocusedContainerColor = Color(0x33FFFFFF)
                     )
                 )
             }
@@ -482,42 +587,268 @@ fun TopFunctionsBar(
 }
 
 @Composable
-fun FilterBadgeChip(
-    selected: Boolean,
+fun GlassDockIconButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String,
+    selected: Boolean,
+    badgeText: String? = null,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    colorTint: Color
 ) {
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(12.dp),
-        color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
-        contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-        modifier = modifier
-            .height(44.dp)
-            .border(
-                1.dp,
-                if (selected) Color.Transparent else MaterialTheme.colorScheme.outline.copy(alpha = 0.15f),
-                RoundedCornerShape(12.dp)
-            )
+    val scale by animateFloatAsState(
+        targetValue = if (selected) 1.1f else 1.0f,
+        animationSpec = spring(dampingRatio = 0.5f, stiffness = Spring.StiffnessMediumLow),
+        label = "DockBtnScale"
+    )
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.graphicsLayer {
+            scaleX = scale
+            scaleY = scale
+        }
     ) {
-        Row(
+        Box(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
+                .size(38.dp)
+                .clip(CircleShape)
+                .background(
+                    if (selected) colorTint.copy(alpha = 0.18f) else Color(0x0A000000)
+                )
+                .border(
+                    width = if (selected) 1.5.dp else 0.8.dp,
+                    brush = if (selected) {
+                        Brush.horizontalGradient(listOf(colorTint, Color.White, colorTint))
+                    } else {
+                        Brush.linearGradient(listOf(Color.White.copy(alpha = 0.8f), Color.Transparent))
+                    },
+                    shape = CircleShape
+                )
+                .clickable(onClick = onClick),
+            contentAlignment = Alignment.Center
         ) {
-            Icon(icon, contentDescription = label, modifier = Modifier.size(16.dp))
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                text = label,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (selected) colorTint else Color(0xFF5C5246),
+                modifier = Modifier.size(16.dp)
             )
+        }
+        
+        if (badgeText != null) {
+            Spacer(modifier = Modifier.height(3.dp))
+            Surface(
+                color = colorTint.copy(alpha = 0.15f),
+                shape = RoundedCornerShape(6.dp)
+            ) {
+                Text(
+                    text = badgeText,
+                    fontSize = 8.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF24201A),
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun HeadlineSpotlightCard(
+    vod: VodItem,
+    isFav: Boolean,
+    onToggleFav: () -> Unit,
+    onClick: () -> Unit
+) {
+    var visibleState by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        visibleState = true
+    }
+    val animatedAlpha by animateFloatAsState(
+        targetValue = if (visibleState) 1f else 0f,
+        animationSpec = spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMediumLow),
+        label = "HeadlineAlpha"
+    )
+    val animatedOffsetY by animateFloatAsState(
+        targetValue = if (visibleState) 0f else 30f,
+        animationSpec = spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMediumLow),
+        label = "HeadlineOffsetY"
+    )
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(215.dp)
+            .graphicsLayer {
+                alpha = animatedAlpha
+                translationY = animatedOffsetY
+            }
+            .clickable(onClick = onClick)
+            .border(
+                width = 1.2.dp,
+                brush = Brush.linearGradient(
+                    colors = listOf(Color.White.copy(alpha = 0.8f), Color(0xFFFCA524).copy(alpha = 0.3f))
+                ),
+                shape = RoundedCornerShape(22.dp)
+            )
+            .testTag("headline_card_${vod.vodId}"),
+        shape = RoundedCornerShape(22.dp),
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            AsyncImage(
+                model = coil.request.ImageRequest.Builder(LocalContext.current)
+                    .data(vod.vodPic)
+                    .crossfade(true)
+                    .build(),
+                contentDescription = vod.vodName,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
+            // Luminous warm translucent ambient mask to replace cold black
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                Color(0x331F1B16),
+                                Color(0xCC1F1B16) // Elegant warm chocolate ground shadow for rich legibility
+                            )
+                        )
+                    )
+            )
+
+            // Dynamic quality status indicator
+            if (!vod.vodRemarks.isNullOrBlank()) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(10.dp)
+                        .background(
+                            Brush.horizontalGradient(
+                                colors = listOf(Color(0xFFFF9800), Color(0xFFFF5722))
+                            ),
+                            RoundedCornerShape(8.dp)
+                        )
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = vod.vodRemarks,
+                        color = Color.White,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                }
+            }
+
+            // Classification badge
+            if (!vod.typeName.isNullOrBlank()) {
+                Surface(
+                    color = Color.Black.copy(alpha = 0.65f),
+                    shape = RoundedCornerShape(6.dp),
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(10.dp)
+                ) {
+                    Text(
+                        text = vod.typeName,
+                        color = Color.White,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                    )
+                }
+            }
+
+            // Info and Spotlight labels
+            Row(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .fillMaxWidth()
+                    .padding(14.dp),
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .background(Color(0xFFE91E63), CircleShape)
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                "FEATURED", 
+                                color = Color.White, 
+                                fontSize = 8.sp, 
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 0.5.sp
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "精选影片推荐",
+                            color = Color(0xFFFCA524),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = vod.vodName,
+                        color = Color.White,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    IconButton(
+                        onClick = onToggleFav,
+                        modifier = Modifier
+                            .size(36.dp)
+                            .background(Color.White.copy(alpha = 0.15f), CircleShape)
+                    ) {
+                        Icon(
+                            imageVector = if (isFav) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                            contentDescription = "收藏本片",
+                            tint = if (isFav) Color(0xFFFF4081) else Color.White,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .height(36.dp)
+                            .background(Color(0xFFFCA524), RoundedCornerShape(18.dp))
+                            .clickable(onClick = onClick)
+                            .padding(horizontal = 12.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.PlayArrow,
+                                contentDescription = "播放",
+                                tint = Color.Black,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text(
+                                "立即点播",
+                                color = Color.Black,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -527,21 +858,51 @@ fun VodGridCard(
     vod: VodItem,
     isFav: Boolean,
     onToggleFav: () -> Unit,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    isAlteredStyle: Boolean = false
 ) {
+    // Elegant entrance rise animation
+    var visibleState by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        visibleState = true
+    }
+    
+    val animatedAlpha by animateFloatAsState(
+        targetValue = if (visibleState) 1f else 0f,
+        animationSpec = spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMediumLow),
+        label = "CardAlpha"
+    )
+    val animatedOffsetY by animateFloatAsState(
+        targetValue = if (visibleState) 0f else 30f,
+        animationSpec = spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMediumLow),
+        label = "CardOffsetY"
+    )
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .height(250.dp)
+            .height(if (isAlteredStyle) 235.dp else 220.dp)
+            .graphicsLayer {
+                alpha = animatedAlpha
+                translationY = animatedOffsetY
+            }
             .clickable(onClick = onClick)
             .border(
-                1.dp,
-                Color(0xFFFCA524).copy(alpha = 0.08f),
-                RoundedCornerShape(18.dp)
+                width = if (isAlteredStyle) 1.2.dp else 0.8.dp,
+                brush = if (isAlteredStyle) {
+                    Brush.horizontalGradient(
+                        listOf(Color(0xFFFCA524), Color(0xFF00E5FF))
+                    )
+                } else {
+                    Brush.linearGradient(
+                        listOf(Color.White.copy(alpha = 0.8f), Color.White.copy(alpha = 0.15f))
+                    )
+                },
+                shape = RoundedCornerShape(20.dp)
             )
             .testTag("vod_card_${vod.vodId}"),
-        shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent)
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             AsyncImage(
@@ -554,87 +915,92 @@ fun VodGridCard(
                 contentScale = ContentScale.Crop
             )
 
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                Color.Transparent,
-                                Color.Black.copy(alpha = 0.4f),
-                                Color.Black.copy(alpha = 0.95f)
-                            )
-                        )
-                    )
-            )
-
+            // Dynamic quality status indicator with glass sticker style
             if (!vod.vodRemarks.isNullOrBlank()) {
                 Surface(
-                    color = MaterialTheme.colorScheme.primary,
+                    color = Color(0xEBFFFAF0),
                     shape = RoundedCornerShape(bottomStart = 10.dp),
+                    border = BorderStroke(0.5.dp, Color(0xFFFCA524).copy(alpha = 0.4f)),
                     modifier = Modifier.align(Alignment.TopEnd)
                 ) {
                     Text(
                         text = vod.vodRemarks,
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        color = Color(0xFFE65100),
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Black,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
                     )
                 }
             }
 
             if (!vod.typeName.isNullOrBlank()) {
                 Surface(
-                    color = Color.Black.copy(alpha = 0.6f),
-                    shape = RoundedCornerShape(8.dp),
+                    color = Color(0xEBF0FAF2),
+                    shape = RoundedCornerShape(topStart = 8.dp, bottomEnd = 8.dp),
+                    border = BorderStroke(0.5.dp, Color(0xFF4CAF50).copy(alpha = 0.3f)),
                     modifier = Modifier
                         .align(Alignment.TopStart)
-                        .padding(8.dp)
+                        .padding(6.dp)
                 ) {
                     Text(
                         text = vod.typeName,
-                        color = Color.White,
-                        fontSize = 10.sp,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        color = Color(0xFF2E7D32),
+                        fontSize = 8.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
                     )
                 }
             }
 
-            IconButton(
-                onClick = onToggleFav,
+            // Compact floating heart toggle
+            Box(
                 modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(4.dp)
-                    .background(Color.Black.copy(alpha = 0.4f), CircleShape)
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 6.dp, bottom = 26.dp)
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xD9FFFFFF))
+                    .border(0.5.dp, Color(0xFFFFCDD2), CircleShape)
+                    .clickable { onToggleFav() },
+                contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = if (isFav) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                     contentDescription = "收藏本剧",
-                    tint = if (isFav) MaterialTheme.colorScheme.primary else Color.White,
-                    modifier = Modifier.size(20.dp)
+                    tint = if (isFav) Color(0xFFFF5252) else Color(0xFF5C5246),
+                    modifier = Modifier.size(14.dp)
                 )
             }
 
+            // Glassmorphic floating caption capsule
             Column(
                 modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .fillMaxWidth(0.8f)
-                    .padding(12.dp)
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(6.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color(0xF5FAF7F2)) // Sophisticated micro glass content overlay
+                    .border(
+                        1.dp,
+                        Brush.linearGradient(listOf(Color.White, Color.White.copy(alpha = 0.3f))),
+                        RoundedCornerShape(14.dp)
+                    )
+                    .padding(horizontal = 8.dp, vertical = 5.dp)
             ) {
                 Text(
                     text = vod.vodName,
-                    color = Color.White,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF24201A),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Black,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
                 if (!vod.vodActor.isNullOrBlank()) {
                     Text(
                         text = "主演: ${vod.vodActor}",
-                        color = Color.LightGray,
-                        fontSize = 11.sp,
+                        color = Color(0xFF6E6356),
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Medium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -652,15 +1018,15 @@ fun FavoriteVodGridCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .height(250.dp)
+            .height(220.dp)
             .clickable(onClick = onClick)
             .border(
-                1.dp,
-                Color(0xFFFCA524).copy(alpha = 0.08f),
-                RoundedCornerShape(18.dp)
+                0.8.dp,
+                Brush.linearGradient(listOf(Color.White, Color.White.copy(alpha = 0.2f))),
+                RoundedCornerShape(20.dp)
             ),
-        shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent)
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             AsyncImage(
@@ -673,54 +1039,51 @@ fun FavoriteVodGridCard(
                 contentScale = ContentScale.Crop
             )
 
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                Color.Transparent,
-                                Color.Black.copy(alpha = 0.4f),
-                                Color.Black.copy(alpha = 0.95f)
-                            )
-                        )
-                    )
-            )
-
             if (!fav.vodRemarks.isNullOrBlank()) {
                 Surface(
-                    color = MaterialTheme.colorScheme.secondary,
+                    color = Color(0xEBFFFAF0),
                     shape = RoundedCornerShape(bottomStart = 10.dp),
+                    border = BorderStroke(0.5.dp, Color(0xFFFCA524).copy(alpha = 0.4f)),
                     modifier = Modifier.align(Alignment.TopEnd)
                 ) {
                     Text(
                         text = fav.vodRemarks,
-                        color = Color.White,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFE65100),
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Black,
                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
                     )
                 }
             }
 
+            // Glassmorphic floating caption capsule
             Column(
                 modifier = Modifier
-                    .align(Alignment.BottomStart)
+                    .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .padding(12.dp)
+                    .padding(6.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color(0xF5FAF7F2))
+                    .border(
+                        1.dp,
+                        Brush.linearGradient(listOf(Color.White, Color.White.copy(alpha = 0.3f))),
+                        RoundedCornerShape(14.dp)
+                    )
+                    .padding(horizontal = 8.dp, vertical = 5.dp)
             ) {
                 Text(
                     text = fav.vodName,
-                    color = Color.White,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF24201A),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Black,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = fav.typeName ?: "未分类",
-                    color = MaterialTheme.colorScheme.primary,
-                    fontSize = 11.sp
+                    text = fav.typeName ?: "未知类型",
+                    color = Color(0xFF4CAF50),
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold
                 )
             }
         }
@@ -741,27 +1104,31 @@ fun CategorySelectionDialog(
                 .padding(vertical = 24.dp)
                 .wrapContentHeight()
                 .testTag("category_dialog_card"),
-            shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            shape = RoundedCornerShape(26.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xF2FAF7F2)), // Sophisticated cream milk-glass
+            border = BorderStroke(
+                1.2.dp,
+                Brush.linearGradient(listOf(Color.White.copy(alpha = 0.9f), Color.White.copy(alpha = 0.2f)))
+            )
         ) {
             Column(
                 modifier = Modifier
-                    .padding(20.dp)
+                    .padding(22.dp)
                     .fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = "系统分类筛选 (居中卡片)",
+                    text = "系统分类筛选",
                     fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(bottom = 16.dp)
+                    fontWeight = FontWeight.Black,
+                    color = Color(0xFF24201A),
+                    modifier = Modifier.padding(bottom = 18.dp)
                 )
 
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(2),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(max = 280.dp)
@@ -789,7 +1156,7 @@ fun CategorySelectionDialog(
                     onClick = onDismiss,
                     modifier = Modifier.align(Alignment.End)
                 ) {
-                    Text("取消", color = MaterialTheme.colorScheme.primary)
+                    Text("完成返回", color = Color(0xFFFCA524), fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -804,23 +1171,27 @@ fun CategoryGridButton(
 ) {
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(12.dp),
-        color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-        contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+        shape = RoundedCornerShape(14.dp),
+        color = if (selected) Color(0xFFFCA524).copy(alpha = 0.15f) else Color(0x0A000000),
+        contentColor = if (selected) Color(0xFFFCA524) else Color(0xFF5C5246),
         modifier = Modifier
             .fillMaxWidth()
-            .height(44.dp)
+            .height(46.dp)
             .border(
-                1.dp,
-                if (selected) Color.Transparent else MaterialTheme.colorScheme.outline.copy(alpha = 0.15f),
-                RoundedCornerShape(12.dp)
+                1.5.dp,
+                if (selected) {
+                    Brush.horizontalGradient(listOf(Color(0xFFFCA524), Color(0xFFFF9800)))
+                } else {
+                    Brush.linearGradient(listOf(Color.White.copy(alpha = 0.8f), Color.Transparent))
+                },
+                RoundedCornerShape(14.dp)
             )
     ) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
             Text(
                 text = name,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold,
+                fontSize = 12.sp,
+                fontWeight = if (selected) FontWeight.Black else FontWeight.SemiBold,
                 textAlign = TextAlign.Center,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -842,18 +1213,34 @@ fun SourceManagementDialog(
     var newSourceUrl by remember { mutableStateOf("") }
     var isAddingMode by remember { mutableStateOf(false) }
 
+    // Breathing effect for the active indicator dot
+    val infiniteTransition = rememberInfiniteTransition(label = "BreatheDot")
+    val dotAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.3f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "DotAlpha"
+    )
+
     Dialog(onDismissRequest = onDismiss) {
         Card(
             modifier = Modifier
                 .fillMaxWidth()
                 .wrapContentHeight()
                 .testTag("source_dialog_card"),
-            shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            shape = RoundedCornerShape(26.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xF2FAF7F2)), // Elegant light pearl frosted glass plate
+            border = BorderStroke(
+                1.5.dp,
+                Brush.linearGradient(listOf(Color.White.copy(alpha = 0.9f), Color(0xFFFCA524).copy(alpha = 0.3f)))
+            )
         ) {
             Column(
                 modifier = Modifier
-                    .padding(20.dp)
+                    .padding(22.dp)
                     .fillMaxWidth()
             ) {
                 Row(
@@ -861,64 +1248,99 @@ fun SourceManagementDialog(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "资源API换源系统",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    IconButton(onClick = { isAddingMode = !isAddingMode }) {
+                    Column {
+                        Text(
+                            text = "极速源专线舱",
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Black,
+                            color = Color(0xFF24201A)
+                        )
+                        Text(
+                            text = "多线路智能解码，即刻热切换",
+                            fontSize = 10.sp,
+                            color = Color(0xFF6E6356)
+                        )
+                    }
+
+                    IconButton(
+                        onClick = { isAddingMode = !isAddingMode },
+                        modifier = Modifier
+                            .background(Color(0x0A000000), CircleShape)
+                            .size(36.dp)
+                    ) {
                         Icon(
                             imageVector = if (isAddingMode) Icons.Default.Cancel else Icons.Default.AddCircle,
                             contentDescription = "添加",
-                            tint = MaterialTheme.colorScheme.primary
+                            tint = Color(0xFFFCA524),
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                AnimatedVisibility(visible = isAddingMode) {
+                AnimatedVisibility(
+                    visible = isAddingMode,
+                    enter = fadeIn() + expandVertically(),
+                    exit = fadeOut() + shrinkVertically()
+                ) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .background(
-                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                                RoundedCornerShape(14.dp)
+                                Color(0x0A000000),
+                                RoundedCornerShape(18.dp)
                             )
-                            .padding(12.dp)
+                            .border(1.dp, Color(0xFFFCA524).copy(alpha = 0.3f), RoundedCornerShape(18.dp))
+                            .padding(14.dp)
                     ) {
-                        Text("添加新数据源", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                        Spacer(modifier = Modifier.height(6.dp))
+                        Text("新增极速线路", fontSize = 13.sp, fontWeight = FontWeight.Black, color = Color(0xFF24201A))
+                        Spacer(modifier = Modifier.height(8.dp))
                         OutlinedTextField(
                             value = newSourceName,
                             onValueChange = { newSourceName = it },
-                            placeholder = { Text("例: 亮子秒播源", fontSize = 12.sp) },
+                            placeholder = { Text("例如: 私家秒播4K极速源", fontSize = 11.sp, color = Color(0xFF8C7F6E)) },
                             singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
+                            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, color = Color(0xFF24201A)),
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Color(0xFFFCA524),
+                                unfocusedBorderColor = Color.Transparent,
+                                focusedContainerColor = Color(0x33FFFFFF),
+                                unfocusedContainerColor = Color(0x33FFFFFF)
+                            )
                         )
-                        Spacer(modifier = Modifier.height(6.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
                         OutlinedTextField(
                             value = newSourceUrl,
                             onValueChange = { newSourceUrl = it },
-                            placeholder = { Text("例: https://cj.lziapi.com/api.php/provide/vod/", fontSize = 11.sp) },
+                            placeholder = { Text("数据源API地址(json格式/ac格式)", fontSize = 11.sp, color = Color(0xFF8C7F6E)) },
                             singleLine = true,
+                            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp, color = Color(0xFF24201A)),
                             modifier = Modifier.fillMaxWidth(),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri)
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Color(0xFFFCA524),
+                                unfocusedBorderColor = Color.Transparent,
+                                focusedContainerColor = Color(0x33FFFFFF),
+                                unfocusedContainerColor = Color(0x33FFFFFF)
+                            )
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
                         Button(
                             onClick = {
                                 if (newSourceName.isNotBlank() && newSourceUrl.isNotBlank()) {
-                                    onAddSource(newSourceName, newSourceUrl)
+                                    onAddSource(newSourceName.trim(), newSourceUrl.trim())
                                     newSourceName = ""
                                     newSourceUrl = ""
                                     isAddingMode = false
                                 }
                             },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFCA524)),
+                            shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("保存并注入此源", fontSize = 12.sp)
+                            Text("保存并激活此解码源", fontSize = 12.sp, color = Color.White, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -928,54 +1350,89 @@ fun SourceManagementDialog(
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 240.dp)
+                        .heightIn(max = 280.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(sources) { source ->
                         val isSelected = activeSource?.url == source.url
+                        
+                        // Glassy responsive borders
+                        val itemBorderBrush = if (isSelected) {
+                            Brush.horizontalGradient(listOf(Color(0xFFFCA524), Color(0xFFFF9800)))
+                        } else {
+                            Brush.linearGradient(listOf(Color.White, Color.Transparent))
+                        }
+
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 4.dp)
-                                .clip(RoundedCornerShape(12.dp))
+                                .clip(RoundedCornerShape(16.dp))
                                 .background(
-                                    if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-                                    else Color.Transparent
+                                    if (isSelected) Color(0xFFFCA524).copy(alpha = 0.12f) else Color(0x0A000000)
                                 )
-                                .clickable {
-                                    onSelectSource(source)
-                                }
-                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                                .border(1.dp, itemBorderBrush, RoundedCornerShape(16.dp))
+                                .clickable { onSelectSource(source) }
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            RadioButton(
-                                selected = isSelected,
-                                onClick = { onSelectSource(source) },
-                                colors = RadioButtonDefaults.colors(selectedColor = MaterialTheme.colorScheme.primary)
+                            // Active breathing dot
+                            Box(
+                                modifier = Modifier
+                                    .size(10.dp)
+                                    .graphicsLayer {
+                                        alpha = if (isSelected) dotAlpha else 0.4f
+                                    }
+                                    .background(
+                                        if (isSelected) Color(0xFF4CAF50) else Color(0xFF8C7F6E),
+                                        CircleShape
+                                    )
                             )
 
+                            Spacer(modifier = Modifier.width(12.dp))
+
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = source.name,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = source.name,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Black,
+                                        color = if (isSelected) Color(0xFF24201A) else Color(0xFF5C5246)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    // Glass tags for lines
+                                    Surface(
+                                        color = if (source.isDefault) Color(0xFFE4703C).copy(alpha = 0.12f) else Color(0xFF00E5FF).copy(alpha = 0.12f),
+                                        shape = RoundedCornerShape(6.dp),
+                                    ) {
+                                        Text(
+                                            text = if (source.isDefault) "官方精品" else "专线接入",
+                                            fontSize = 8.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (source.isDefault) Color(0xFFE4703C) else Color(0xFF00B8D4),
+                                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(2.dp))
                                 Text(
                                     text = source.url,
-                                    fontSize = 10.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 9.sp,
+                                    color = Color(0xFF8C7F6E),
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
                             }
 
                             if (!source.isDefault) {
-                                IconButton(onClick = { onDeleteSource(source.url) }) {
+                                IconButton(
+                                    onClick = { onDeleteSource(source.url) },
+                                    modifier = Modifier.size(28.dp)
+                                ) {
                                     Icon(
                                         Icons.Default.Delete,
                                         contentDescription = "删除源",
-                                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
-                                        modifier = Modifier.size(18.dp)
+                                        tint = Color(0xFFFF5252).copy(alpha = 0.8f),
+                                        modifier = Modifier.size(16.dp)
                                     )
                                 }
                             }
@@ -986,11 +1443,16 @@ fun SourceManagementDialog(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 12.dp),
+                        .padding(top = 16.dp),
                     horizontalArrangement = Arrangement.End
                 ) {
-                    TextButton(onClick = onDismiss) {
-                        Text("完成", color = MaterialTheme.colorScheme.primary)
+                    TextButton(
+                        onClick = onDismiss,
+                        modifier = Modifier
+                            .background(Color(0xFFFCA524).copy(alpha = 0.15f), RoundedCornerShape(12.dp))
+                            .padding(horizontal = 14.dp, vertical = 2.dp)
+                    ) {
+                        Text("保存并应用舱单", color = Color(0xFFE65100), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -1012,7 +1474,7 @@ fun VodDetailsSection(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(Color.Transparent)
     ) {
         // 动态模糊顶部背景海报层
         Box(
@@ -1028,7 +1490,7 @@ fun VodDetailsSection(
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop,
-                alpha = 0.2f
+                alpha = 0.25f
             )
             Box(
                 modifier = Modifier
@@ -1037,8 +1499,8 @@ fun VodDetailsSection(
                         Brush.verticalGradient(
                             colors = listOf(
                                 Color.Transparent,
-                                MaterialTheme.colorScheme.background.copy(alpha = 0.6f),
-                                MaterialTheme.colorScheme.background
+                                Color(0x33FAF7F2),
+                                Color(0xCCFAF7F2)
                             )
                         )
                     )
@@ -1351,7 +1813,7 @@ fun EmbeddedVideoSection(
                 }
             }
 
-            Box(
+             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .aspectRatio(1.77f) 
@@ -1367,6 +1829,11 @@ fun EmbeddedVideoSection(
                                 useWideViewPort = true
                                 loadWithOverviewMode = true
                                 databaseEnabled = true
+                                allowFileAccess = true
+                                allowContentAccess = true
+                                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+                                    mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                                }
                             }
                             webViewClient = WebViewClient()
                             webChromeClient = WebChromeClient()
@@ -1375,13 +1842,81 @@ fun EmbeddedVideoSection(
                     update = { view ->
                         if (url.endsWith(".m3u8") || url.contains(".m3u8")) {
                             val template = getHlsHtmlTemplate(url)
-                            view.loadDataWithBaseURL("https://cdn.jsdelivr.net", template, "text/html", "utf-8", null)
+                            // Use stream base host domain instead of file .m3u8 URL to preserve relative segment resolutions and bypass CORS blockages
+                            val hostBaseUrl = try {
+                                val uri = Uri.parse(url)
+                                val scheme = uri.scheme ?: "https"
+                                val host = uri.host ?: ""
+                                val port = if (uri.port != -1) ":${uri.port}" else ""
+                                "$scheme://$host$port/"
+                            } catch (e: Exception) {
+                                "https://cdnjs.cloudflare.com"
+                            }
+                            view.loadDataWithBaseURL(hostBaseUrl, template, "text/html", "utf-8", null)
                         } else {
                             view.loadUrl(url)
                         }
                     },
                     modifier = Modifier.fillMaxSize()
                 )
+            }
+
+            // Quick helper buttons for copy direct link and external play
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color.Black)
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Button(
+                    onClick = {
+                        try {
+                            val intent = Intent(Intent.ACTION_VIEW).apply {
+                                setDataAndType(Uri.parse(url), "video/*")
+                            }
+                            context.startActivity(intent)
+                        } catch (e: Exception) {
+                            try {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                context.startActivity(intent)
+                            } catch (e2: Exception) {
+                                Toast.makeText(context, "未找到外部视频播放器", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF5722)),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(vertical = 4.dp)
+                ) {
+                    Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color.White)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("调用第三方播放", fontSize = 11.sp, color = Color.White)
+                }
+
+                OutlinedButton(
+                    onClick = {
+                        try {
+                            val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                            val clip = android.content.ClipData.newPlainText("Direct Stream URL", url)
+                            clipboard.setPrimaryClip(clip)
+                            Toast.makeText(context, "直链地址已复制剪切板 📌", Toast.LENGTH_SHORT).show()
+                        } catch (e: Exception) {
+                            Toast.makeText(context, "复制失败", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF00E5FF)),
+                    border = BorderStroke(1.dp, Color(0xFF00E5FF).copy(alpha = 0.5f)),
+                    contentPadding = PaddingValues(vertical = 4.dp)
+                ) {
+                    Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(13.dp), tint = Color(0xFF00E5FF))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("直接复制直链", fontSize = 11.sp, color = Color(0xFF00E5FF))
+                }
             }
         }
     }
@@ -1396,24 +1931,67 @@ fun getHlsHtmlTemplate(m3u8Url: String): String {
             <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
             <style>
                 body, html { margin:0; padding:0; width:100%; height:100%; background-color:#000; overflow:hidden; display:flex; justify-content:center; align-items:center; }
-                video { width:100%; height:100%; object-fit:contain; outline:none; }
+                video { width:100%; height:100%; object-fit:contain; outline:none; cursor: pointer; }
             </style>
-            <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+            <script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.4.12/hls.min.js"></script>
         </head>
         <body>
-            <video id="video" controls autoplay playsinline></video>
+            <video id="video" window-playsinline playsinline autoplay controls style="width:100%; height:100%;"></video>
             <script>
                 var video = document.getElementById('video');
                 var videoSrc = '$m3u8Url';
-                if (Hls.isSupported()) {
+                
+                function playOrFallback() {
+                    video.src = videoSrc;
+                    video.play().catch(function(e) {
+                        console.log("Autoplay bound, waiting user trigger: ", e);
+                    });
+                }
+                
+                // Allow touch-interaction play-start if autoplay fails
+                window.addEventListener('click', function() {
+                    if (video.paused) {
+                        video.play().catch(function(err){ console.log(err); });
+                    }
+                }, { once: true });
+
+                if (typeof Hls !== 'undefined' && Hls.isSupported()) {
                     var hls = new Hls({
                         enableWorker: true,
-                        lowLatencyMode: true
+                        lowLatencyMode: true,
+                        maxMaxBufferLength: 30,
+                        backBufferLength: 10
                     });
+                    
                     hls.loadSource(videoSrc);
                     hls.attachMedia(video);
-                } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-                    video.src = videoSrc;
+                    
+                    hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                        video.play().catch(function(err) {
+                            console.log("Autoplay blocked, waiting interaction: ", err);
+                        });
+                    });
+                    
+                    hls.on(Hls.Events.ERROR, function(event, data) {
+                        if (data.fatal) {
+                            switch (data.type) {
+                                case Hls.ErrorTypes.NETWORK_ERROR:
+                                    console.log("Network error fatal, retrying...");
+                                    hls.startLoad();
+                                    break;
+                                case Hls.ErrorTypes.MEDIA_ERROR:
+                                    console.log("Media error fatal, recovering...");
+                                    hls.recoverMediaError();
+                                    break;
+                                default:
+                                    console.log("Fatal crash, switching engine play");
+                                    playOrFallback();
+                                    break;
+                            }
+                        }
+                    });
+                } else {
+                    playOrFallback();
                 }
             </script>
         </body>
@@ -1427,117 +2005,165 @@ fun PaginationControls(
     totalPages: Int,
     onPageChange: (Int) -> Unit
 ) {
+    if (totalPages <= 1) return
+
     var jumpPageInput by remember { mutableStateOf("") }
-    
+    var isInputExpanded by remember { mutableStateOf(false) }
+
     LaunchedEffect(currentPage) {
         jumpPageInput = ""
+        isInputExpanded = false
     }
 
-    Card(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 14.dp, vertical = 8.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
-        shape = RoundedCornerShape(14.dp)
+            .padding(vertical = 6.dp),
+        contentAlignment = Alignment.Center
     ) {
-        Column(
-            modifier = Modifier.padding(10.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(
-                    onClick = { onPageChange(currentPage - 1) },
-                    enabled = currentPage > 1,
-                    modifier = Modifier.testTag("prev_page_button")
-                ) {
-                    Icon(
-                        Icons.Default.ArrowBack,
-                        contentDescription = "上一页",
-                        tint = if (currentPage > 1) MaterialTheme.colorScheme.primary else Color.Gray
-                    )
-                }
-
-                Text(
-                    text = "第 $currentPage / $totalPages 页",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
+        // Futuristic glassmorphic micro-floating capsule
+        Row(
+            modifier = Modifier
+                .clip(CircleShape)
+                .background(Color(0xE6FAF7F2)) // Silky high-opacity frosted white warm glass
+                .border(
+                    width = 1.dp,
+                    brush = Brush.linearGradient(
+                        listOf(Color.White.copy(alpha = 0.9f), Color(0xFFFCA524).copy(alpha = 0.2f))
+                    ),
+                    shape = CircleShape
                 )
+                .padding(horizontal = 4.dp, vertical = 3.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            // Previous button, circular & subtle
+            IconButton(
+                onClick = { onPageChange(currentPage - 1) },
+                enabled = currentPage > 1,
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .background(if (currentPage > 1) Color(0x0F000000) else Color.Transparent)
+                    .testTag("prev_page_button")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.ArrowBack,
+                    contentDescription = "上一页",
+                    tint = if (currentPage > 1) Color(0xFF24201A) else Color(0x3324201A),
+                    modifier = Modifier.size(12.dp)
+                )
+            }
 
-                IconButton(
-                    onClick = { onPageChange(currentPage + 1) },
-                    enabled = currentPage < totalPages,
-                    modifier = Modifier.testTag("next_page_button")
+            // Compact Elegant indicator
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .clickable { isInputExpanded = !isInputExpanded }
+                    .padding(horizontal = 8.dp, vertical = 2.dp)
+            ) {
+                Text(
+                    text = "$currentPage",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Black,
+                    color = Color(0xFFFCA524)
+                )
+                Text(
+                    text = " / $totalPages",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color(0xFF6E6356)
+                )
+            }
+
+            // Quick tiny slide input for high-end feel
+            AnimatedVisibility(
+                visible = isInputExpanded,
+                enter = expandHorizontally(expandFrom = Alignment.End) + fadeIn(),
+                exit = shrinkHorizontally(shrinkTowards = Alignment.End) + fadeOut()
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(end = 2.dp)
                 ) {
-                    Icon(
-                        Icons.Default.ArrowForward,
-                        contentDescription = "下一页",
-                        tint = if (currentPage < totalPages) MaterialTheme.colorScheme.primary else Color.Gray
+                    androidx.compose.foundation.text.BasicTextField(
+                        value = jumpPageInput,
+                        onValueChange = {
+                            if (it.isEmpty() || it.all { char -> char.isDigit() }) {
+                                jumpPageInput = it
+                            }
+                        },
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Number,
+                            imeAction = ImeAction.Go
+                        ),
+                        keyboardActions = KeyboardActions(
+                            onGo = {
+                                val parse = jumpPageInput.toIntOrNull()
+                                if (parse != null && parse in 1..totalPages) {
+                                    onPageChange(parse)
+                                    isInputExpanded = false
+                                }
+                            }
+                        ),
+                        textStyle = androidx.compose.ui.text.TextStyle(
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF24201A),
+                            textAlign = TextAlign.Center
+                        ),
+                        modifier = Modifier
+                            .width(32.dp)
+                            .height(20.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color(0x0F000000))
+                            .border(0.5.dp, Color(0xFFFCA524).copy(alpha = 0.5f), RoundedCornerShape(6.dp))
+                            .padding(top = 1.dp)
+                            .testTag("jump_page_input")
                     )
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(20.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFFFCA524))
+                            .clickable {
+                                val parse = jumpPageInput.toIntOrNull()
+                                if (parse != null && parse in 1..totalPages) {
+                                    onPageChange(parse)
+                                    isInputExpanded = false
+                                }
+                            }
+                            .testTag("jump_go_button"),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = "验证",
+                            tint = Color.White,
+                            modifier = Modifier.size(9.dp)
+                        )
+                    }
                 }
             }
 
-            Row(
+            // Next button, circular & subtle
+            IconButton(
+                onClick = { onPageChange(currentPage + 1) },
+                enabled = currentPage < totalPages,
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .background(if (currentPage < totalPages) Color(0x0F000000) else Color.Transparent)
+                    .testTag("next_page_button")
             ) {
-                Text("快速跳转:", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(modifier = Modifier.width(6.dp))
-                
-                OutlinedTextField(
-                    value = jumpPageInput,
-                    onValueChange = {
-                        if (it.isEmpty() || it.all { char -> char.isDigit() }) {
-                            jumpPageInput = it
-                        }
-                    },
-                    modifier = Modifier
-                        .width(65.dp)
-                        .height(38.dp)
-                        .testTag("jump_page_input"),
-                    singleLine = true,
-                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp, textAlign = TextAlign.Center),
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Number,
-                        imeAction = ImeAction.Go
-                    ),
-                    keyboardActions = KeyboardActions(
-                        onGo = {
-                            val parse = jumpPageInput.toIntOrNull()
-                            if (parse != null && parse in 1..totalPages) {
-                                onPageChange(parse)
-                            }
-                        }
-                    ),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                        unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
-                    )
+                Icon(
+                    imageVector = Icons.Default.ArrowForward,
+                    contentDescription = "下一页",
+                    tint = if (currentPage < totalPages) Color(0xFF24201A) else Color(0x3324201A),
+                    modifier = Modifier.size(12.dp)
                 )
-
-                Spacer(modifier = Modifier.width(6.dp))
-
-                Button(
-                    onClick = {
-                        val parse = jumpPageInput.toIntOrNull()
-                        if (parse != null && parse in 1..totalPages) {
-                            onPageChange(parse)
-                        }
-                    },
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                    modifier = Modifier
-                        .height(32.dp)
-                        .testTag("jump_go_button")
-                ) {
-                    Text("前往", fontSize = 11.sp)
-                }
             }
         }
     }
@@ -1580,12 +2206,26 @@ fun FooterSection() {
             .padding(vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(
-            text = "转述（vx号gjxly0304）",
-            fontSize = 11.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5F),
-            letterSpacing = 2.sp,
-            fontWeight = FontWeight.Medium
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .clip(CircleShape)
+                .background(Color(0x0A000000))
+                .padding(horizontal = 10.dp, vertical = 4.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Info,
+                contentDescription = null,
+                tint = Color(0x6624201A),
+                modifier = Modifier.size(10.dp)
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(
+                text = "vx: gjxly0304",
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0x6624201A)
+            )
+        }
     }
 }

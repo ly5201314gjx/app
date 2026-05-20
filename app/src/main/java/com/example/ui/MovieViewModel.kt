@@ -51,7 +51,7 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val activeSource: StateFlow<ApiSource?> = repository.activeSourceFlow
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     // UI Configuration States
     val searchQuery = MutableStateFlow("")
@@ -69,7 +69,7 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
     val activePlayingTitle = MutableStateFlow<String?>(null)
 
     // Api Categories compiled from remote response on load
-    private val _categories = MutableStateFlow<List<CategoryItem>>(emptyList())
+    private val _categories = MutableStateFlow<List<CategoryItem>>(getDefaultFallbackCategories())
     val categories: StateFlow<List<CategoryItem>> = _categories.asStateFlow()
 
     // Response State for Main View
@@ -82,12 +82,72 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             activeSource.collect { source ->
                 if (source != null) {
-                    // Reset page and categories when API key/endpoint changes
-                    currentPage.value = 1
-                    selectedCategory.value = null
-                    _categories.value = emptyList()
-                    loadMovies()
+                    // Load standard view if idle
+                    if (uiState.value is MovieUiState.Idle) {
+                        loadMovies()
+                        loadCategoriesForActiveSource(source.url)
+                    }
                 }
+            }
+        }
+    }
+
+    private fun loadCategoriesForActiveSource(sourceUrl: String) {
+        viewModelScope.launch {
+            try {
+                val response = repository.fetchVodList(
+                    baseUrl = sourceUrl,
+                    pg = 1,
+                    categoryId = null,
+                    keyword = null
+                )
+                val fetched = response.classList
+                if (!fetched.isNullOrEmpty()) {
+                    _categories.value = fetched
+                } else {
+                    _categories.value = getDefaultFallbackCategories()
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                _categories.value = getDefaultFallbackCategories()
+            }
+        }
+    }
+
+    private fun getDefaultFallbackCategories(): List<CategoryItem> {
+        return listOf(
+            CategoryItem(1, "电影"),
+            CategoryItem(2, "电视剧"),
+            CategoryItem(3, "综艺"),
+            CategoryItem(4, "动漫"),
+            CategoryItem(20, "动作片"),
+            CategoryItem(21, "喜剧片"),
+            CategoryItem(22, "爱情片"),
+            CategoryItem(23, "科幻片")
+        )
+    }
+
+    fun selectAndFetchDetails(vodId: Int, fallbackName: String) {
+        viewModelScope.launch {
+            val source = repository.getActiveSource() ?: return@launch
+            _uiState.value = MovieUiState.Loading
+            try {
+                val response = repository.fetchVodDetails(source.url, vodId)
+                val fullVodItem = response.list?.firstOrNull()
+                if (fullVodItem != null) {
+                    selectedVod.value = fullVodItem
+                    _uiState.value = MovieUiState.Success(response)
+                } else {
+                    // Fallback search by name if ID did not match across sources
+                    selectedVod.value = null
+                    search(fallbackName)
+                    android.widget.Toast.makeText(getApplication(), "该视频在当前线路暂无对应ID，已为您自动全网搜索该片", android.widget.Toast.LENGTH_LONG).show()
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                selectedVod.value = null
+                search(fallbackName)
+                android.widget.Toast.makeText(getApplication(), "自动匹配中: 正在极速专线中检索 \"$fallbackName\"", android.widget.Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -177,7 +237,13 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
     // API Source Configurations
     fun selectApiSource(source: ApiSource) {
         viewModelScope.launch {
+            _uiState.value = MovieUiState.Loading
             repository.selectSource(source.url)
+            currentPage.value = 1
+            selectedCategory.value = null
+            _categories.value = getDefaultFallbackCategories()
+            loadMovies()
+            loadCategoriesForActiveSource(source.url)
         }
     }
 
