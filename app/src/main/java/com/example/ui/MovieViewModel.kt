@@ -55,6 +55,8 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
     val activeSource: StateFlow<ApiSource?> = repository.activeSourceFlow
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
+    val parallelSearchEnabled = MutableStateFlow(true)
+
     // UI Configuration States
     val searchQuery = MutableStateFlow("")
     val selectedCategory = MutableStateFlow<CategoryItem?>(null)
@@ -132,7 +134,6 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
     fun selectAndFetchDetails(vodId: Int, fallbackName: String, specificSourceUrl: String? = null) {
         viewModelScope.launch {
             val sourceUrl = specificSourceUrl ?: repository.getActiveSource()?.url ?: return@launch
-            _uiState.value = MovieUiState.Loading
             try {
                 val response = repository.fetchVodDetails(sourceUrl, vodId)
                 val fullVodItem = response.list?.firstOrNull()
@@ -141,7 +142,6 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
                     val allSrcs = apiSources.value
                     fullVodItem.apiSourceName = allSrcs.find { it.url == sourceUrl }?.name ?: "专线"
                     selectedVod.value = fullVodItem
-                    _uiState.value = MovieUiState.Success(response)
                 } else {
                     // Fallback search by name if ID did not match across sources
                     selectedVod.value = null
@@ -166,7 +166,9 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
             _uiState.value = MovieUiState.Loading
             try {
                 if (isSearching) {
-                    val sources = apiSources.value.ifEmpty {
+                    val sources = if (parallelSearchEnabled.value) {
+                        apiSources.value.ifEmpty { listOfNotNull(repository.getActiveSource()) }
+                    } else {
                         listOfNotNull(repository.getActiveSource())
                     }
                     val deferredRes = sources.map { source ->

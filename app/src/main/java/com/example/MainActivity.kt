@@ -38,6 +38,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -97,6 +98,8 @@ fun MovieMainScreen() {
     val activePlayingUrl by viewModel.activePlayingUrl.collectAsStateWithLifecycle()
     val activePlayingTitle by viewModel.activePlayingTitle.collectAsStateWithLifecycle()
     val currentPage by viewModel.currentPage.collectAsStateWithLifecycle()
+
+    val parallelSearchEnabled by viewModel.parallelSearchEnabled.collectAsStateWithLifecycle()
 
     // Back button handling
     BackHandler(enabled = activePlayingUrl != null || selectedVod != null) {
@@ -208,6 +211,8 @@ fun MovieMainScreen() {
                 SourceManagementDialog(
                     activeSource = activeSource,
                     sources = apiSources,
+                    parallelSearchEnabled = parallelSearchEnabled,
+                    onToggleParallelSearch = { viewModel.parallelSearchEnabled.value = it },
                     onSelectSource = { 
                         viewModel.selectApiSource(it)
                         viewModel.showSourceDialog.value = false
@@ -499,66 +504,60 @@ fun TopFunctionsBar(
             }
         }
 
-        // Animated drop-down glass-frosted input field
+        // Animated drop-down exquisite mini search field
         AnimatedVisibility(
             visible = isSearchingOpen,
             enter = expandVertically(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) + fadeIn(),
             exit = shrinkVertically(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) + fadeOut()
         ) {
-            Column(
+            Box(
                 modifier = Modifier
-                    .padding(top = 10.dp)
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(Color(0x99FFFFFF)) // Mist panel
-                    .border(1.dp, Color.White.copy(alpha = 0.6f), RoundedCornerShape(18.dp))
-                    .padding(8.dp)
+                    .padding(top = 8.dp)
+                    .fillMaxWidth(0.85f)
+                    .height(34.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFFF7F7F7))
+                    .border(0.5.dp, Color(0xFFE5E5E5), CircleShape)
             ) {
-                OutlinedTextField(
+                androidx.compose.foundation.text.BasicTextField(
                     value = localSearchText,
                     onValueChange = { localSearchText = it },
-                    placeholder = { Text("搜索影片、导演、主演...", fontSize = 12.sp, color = Color(0xFF8C7F6E)) },
                     singleLine = true,
-                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, color = Color(0xFF24201A)),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("search_field"),
-                    shape = RoundedCornerShape(14.dp),
-                    trailingIcon = {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 4.dp)) {
-                            if (localSearchText.isNotBlank()) {
-                                IconButton(
-                                    onClick = {
-                                        localSearchText = ""
-                                        onClear()
-                                    },
-                                    modifier = Modifier.size(24.dp)
+                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, color = Color(0xFF424242)),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = { onSearch(localSearchText.trim()) }),
+                    decorationBox = { innerTextField ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 12.dp)
+                        ) {
+                            Icon(Icons.Default.Search, contentDescription = null, tint = Color(0xFFBDBDBD), modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Box(modifier = Modifier.weight(1f)) {
+                                if (localSearchText.isEmpty()) {
+                                    Text("寻找精彩...", fontSize = 12.sp, color = Color(0xFFBDBDBD))
+                                }
+                                innerTextField()
+                            }
+                            if (localSearchText.isNotEmpty()) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(18.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFFE0E0E0))
+                                        .clickable { 
+                                            localSearchText = ""
+                                            onClear()
+                                        },
+                                    contentAlignment = Alignment.Center
                                 ) {
-                                    Icon(Icons.Default.Clear, contentDescription = "清除", tint = Color(0xFF8C7F6E), modifier = Modifier.size(16.dp))
+                                    Icon(Icons.Default.Close, contentDescription = "Clear", tint = Color(0xFF757575), modifier = Modifier.size(10.dp))
                                 }
                             }
-                            IconButton(
-                                onClick = { onSearch(localSearchText.trim()) },
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .background(Color(0xFFE4703C), CircleShape)
-                            ) {
-                                Icon(Icons.Default.Search, contentDescription = "搜索", tint = Color.White, modifier = Modifier.size(14.dp))
-                            }
                         }
-                    },
-                    keyboardOptions = KeyboardOptions(
-                        imeAction = ImeAction.Search,
-                        keyboardType = KeyboardType.Text
-                    ),
-                    keyboardActions = KeyboardActions(
-                        onSearch = { onSearch(localSearchText.trim()) }
-                    ),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Color(0xFFE4703C),
-                        unfocusedBorderColor = Color.Transparent,
-                        focusedContainerColor = Color(0x1A000000),
-                        unfocusedContainerColor = Color(0x1A000000)
-                    )
+                    }
                 )
             }
         }
@@ -1228,6 +1227,8 @@ fun CategoryGridButton(
 fun SourceManagementDialog(
     activeSource: ApiSource?,
     sources: List<ApiSource>,
+    parallelSearchEnabled: Boolean,
+    onToggleParallelSearch: (Boolean) -> Unit,
     onSelectSource: (ApiSource) -> Unit,
     onAddSource: (String, String) -> Unit,
     onDeleteSource: (String) -> Unit,
@@ -1300,6 +1301,36 @@ fun SourceManagementDialog(
                         )
                     }
                 }
+                
+                Spacer(modifier = Modifier.height(10.dp))
+                
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0x0A000000))
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("多源并行搜索", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF24201A))
+                        Text("开启全站自动热搜跨域检测匹配引擎", fontSize = 10.sp, color = Color(0xFF6E6356))
+                    }
+                    Switch(
+                        checked = parallelSearchEnabled,
+                        onCheckedChange = { onToggleParallelSearch(it) },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = Color(0xFFFCA524),
+                            uncheckedThumbColor = Color(0xFFB5AA9A),
+                            uncheckedTrackColor = Color(0xFFE2D6C5)
+                        ),
+                        modifier = Modifier.scale(0.8f)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
 
                 Spacer(modifier = Modifier.height(12.dp))
 
@@ -1782,6 +1813,7 @@ fun VodDetailsSection(
 }
 }
 
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable
 fun EmbeddedVideoSection(
     title: String,
@@ -1789,187 +1821,213 @@ fun EmbeddedVideoSection(
     onClose: () -> Unit
 ) {
     val context = LocalContext.current
-    
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(12.dp),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.Black)
-    ) {
-        Column {
+    var isFullScreen by remember { mutableStateOf(false) }
+    var playbackSpeed by remember { mutableFloatStateOf(1f) }
+
+    val exoPlayer = remember {
+        // Bypass SSL certificate errors globally for DefaultHttpDataSource (often needed for custom APIs)
+        try {
+            val trustAllCerts = arrayOf<javax.net.ssl.TrustManager>(object : javax.net.ssl.X509TrustManager {
+                override fun getAcceptedIssuers(): Array<java.security.cert.X509Certificate> = arrayOf()
+                override fun checkClientTrusted(certs: Array<java.security.cert.X509Certificate>, authType: String) {}
+                override fun checkServerTrusted(certs: Array<java.security.cert.X509Certificate>, authType: String) {}
+            })
+            val sc = javax.net.ssl.SSLContext.getInstance("SSL")
+            sc.init(null, trustAllCerts, java.security.SecureRandom())
+            javax.net.ssl.HttpsURLConnection.setDefaultSSLSocketFactory(sc.socketFactory)
+            javax.net.ssl.HttpsURLConnection.setDefaultHostnameVerifier { _, _ -> true }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+        val dataSourceFactory = androidx.media3.datasource.DefaultHttpDataSource.Factory()
+            .setAllowCrossProtocolRedirects(true)
+            .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36")
+        val mediaSourceFactory = androidx.media3.exoplayer.source.DefaultMediaSourceFactory(context)
+            .setDataSourceFactory(dataSourceFactory)
+
+        androidx.media3.exoplayer.ExoPlayer.Builder(context)
+            .setMediaSourceFactory(mediaSourceFactory)
+            .build().apply {
+                playWhenReady = true
+                addListener(object : androidx.media3.common.Player.Listener {
+                    override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                        android.util.Log.e("ExoPlayer", "Playback error: ${error.message}", error)
+                        android.widget.Toast.makeText(context, "播放失败: 无法解析播放地址或网络异常", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                })
+            }
+    }
+
+    val activity = context as? android.app.Activity
+    DisposableEffect(isFullScreen) {
+        if (isFullScreen) {
+            activity?.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        } else {
+            activity?.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
+        onDispose {
+            if (isFullScreen) {
+                activity?.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            }
+        }
+    }
+
+    DisposableEffect(url) {
+        val uri = Uri.parse(url)
+        val mediaItemBuilder = androidx.media3.common.MediaItem.Builder().setUri(uri)
+        if (url.contains(".m3u8") || url.contains("m3u8")) {
+            mediaItemBuilder.setMimeType(androidx.media3.common.MimeTypes.APPLICATION_M3U8)
+        } else if (url.contains(".mp4")) {
+            mediaItemBuilder.setMimeType(androidx.media3.common.MimeTypes.APPLICATION_MP4)
+        }
+        val mediaItem = mediaItemBuilder.build()
+        exoPlayer.setMediaItem(mediaItem)
+        exoPlayer.prepare()
+        exoPlayer.playWhenReady = true
+        onDispose { }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            exoPlayer.release()
+        }
+    }
+
+    val content = @Composable { modifier: Modifier ->
+        Column(modifier = modifier.background(Color.Black)) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color.DarkGray.copy(alpha = 0.3f))
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                    .background(Color(0xFF1E1E1E))
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
                     Icon(
                         Icons.Default.PlayCircle,
-                        contentDescription = "内置中",
+                        contentDescription = "Playing",
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         text = title,
                         color = Color.White,
-                        fontSize = 11.sp,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
 
-                Row {
-                    IconButton(
-                        onClick = {
-                            try {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                                context.startActivity(intent)
-                            } catch (e: Exception) {
-                                Toast.makeText(context, "无法唤醒外部播放器", Toast.LENGTH_SHORT).show()
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Speed Control
+                    Surface(
+                        color = Color.Transparent,
+                        shape = RoundedCornerShape(4.dp),
+                        modifier = Modifier.clickable {
+                            playbackSpeed = when (playbackSpeed) {
+                                1f -> 1.25f
+                                1.25f -> 1.5f
+                                1.5f -> 2f
+                                2f -> 0.5f
+                                0.5f -> 1f
+                                else -> 1f
                             }
-                        },
-                        modifier = Modifier.size(24.dp)
+                            exoPlayer.playbackParameters = androidx.media3.common.PlaybackParameters(playbackSpeed)
+                        }
+                    ) {
+                        Text(
+                            text = "${playbackSpeed}x",
+                            color = Color(0xFF4DB6AC),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+
+                    IconButton(
+                        onClick = { isFullScreen = !isFullScreen },
+                        modifier = Modifier.size(28.dp)
                     ) {
                         Icon(
-                            Icons.Default.OpenInNew,
-                            contentDescription = "系统跳转打开",
+                            if (isFullScreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                            contentDescription = "Fullscreen Toggle",
                             tint = Color.White,
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                     
                     Spacer(modifier = Modifier.width(8.dp))
 
-                    IconButton(onClick = onClose, modifier = Modifier.size(24.dp)) {
+                    IconButton(onClick = onClose, modifier = Modifier.size(28.dp)) {
                         Icon(
                             Icons.Default.Close,
-                            contentDescription = "关闭",
+                            contentDescription = "Close",
                             tint = Color.White,
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                 }
             }
 
-             Box(
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .aspectRatio(1.77f) 
+                    .weight(1f)
                     .background(Color.Black)
             ) {
                 AndroidView(
+                    modifier = Modifier.fillMaxSize(),
                     factory = { ctx ->
-                        WebView(ctx).apply {
-                            settings.apply {
-                                javaScriptEnabled = true
-                                domStorageEnabled = true
-                                mediaPlaybackRequiresUserGesture = false
-                                useWideViewPort = true
-                                loadWithOverviewMode = true
-                                databaseEnabled = true
-                                allowFileAccess = true
-                                allowContentAccess = true
-                                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-                                    mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-                                }
-                            }
-                            webViewClient = WebViewClient()
-                            webChromeClient = WebChromeClient()
+                        androidx.media3.ui.PlayerView(ctx).apply {
+                            player = exoPlayer
+                            useController = true
+                            setShowNextButton(false)
+                            setShowPreviousButton(false)
+                            setShowFastForwardButton(true)
+                            setShowRewindButton(true)
+                            controllerShowTimeoutMs = 3000
+                            setKeepScreenOn(true)
                         }
                     },
                     update = { view ->
-                        val loadedUrl = view.tag as? String
-                        if (loadedUrl != url) {
-                            view.tag = url
-                            if (url.endsWith(".m3u8") || url.contains(".m3u8")) {
-                                val template = getHlsHtmlTemplate(url)
-                                // Extract the precise parent dir or domain to bypass CORS/404 issues on relative files
-                                val hostBaseUrl = try {
-                                    val lastSlash = url.lastIndexOf('/')
-                                    if (lastSlash != -1) {
-                                        url.substring(0, lastSlash + 1)
-                                    } else {
-                                        val uri = Uri.parse(url)
-                                        val scheme = uri.scheme ?: "https"
-                                        val host = uri.host ?: ""
-                                        val port = if (uri.port != -1) ":${uri.port}" else ""
-                                        "$scheme://$host$port/"
-                                    }
-                                } catch (e: Exception) {
-                                    "https://cdn.jsdelivr.net"
-                                }
-                                view.loadDataWithBaseURL(hostBaseUrl, template, "text/html", "utf-8", null)
-                            } else {
-                                view.loadUrl(url)
-                            }
-                        }
-                    },
-                    modifier = Modifier.fillMaxSize()
+                        view.player = exoPlayer
+                    }
                 )
             }
+        }
+    }
 
-            // Quick helper buttons for copy direct link and external play
-            Row(
+    if (isFullScreen) {
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { isFullScreen = false },
+            properties = androidx.compose.ui.window.DialogProperties(
+                usePlatformDefaultWidth = false,
+                dismissOnBackPress = true,
+                decorFitsSystemWindows = false
+            )
+        ) {
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
+                    .fillMaxSize()
                     .background(Color.Black)
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
             ) {
-                Button(
-                    onClick = {
-                        try {
-                            val intent = Intent(Intent.ACTION_VIEW).apply {
-                                setDataAndType(Uri.parse(url), "video/*")
-                            }
-                            context.startActivity(intent)
-                        } catch (e: Exception) {
-                            try {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                                context.startActivity(intent)
-                            } catch (e2: Exception) {
-                                Toast.makeText(context, "未找到外部视频播放器", Toast.LENGTH_SHORT).show()
-                            }
-                        }
-                    },
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF5722)),
-                    shape = RoundedCornerShape(8.dp),
-                    contentPadding = PaddingValues(vertical = 4.dp)
-                ) {
-                    Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color.White)
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("调用第三方播放", fontSize = 11.sp, color = Color.White)
-                }
-
-                OutlinedButton(
-                    onClick = {
-                        try {
-                            val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                            val clip = android.content.ClipData.newPlainText("Direct Stream URL", url)
-                            clipboard.setPrimaryClip(clip)
-                            Toast.makeText(context, "直链地址已复制剪切板 📌", Toast.LENGTH_SHORT).show()
-                        } catch (e: Exception) {
-                            Toast.makeText(context, "复制失败", Toast.LENGTH_SHORT).show()
-                        }
-                    },
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF00E5FF)),
-                    border = BorderStroke(1.dp, Color(0xFF00E5FF).copy(alpha = 0.5f)),
-                    contentPadding = PaddingValues(vertical = 4.dp)
-                ) {
-                    Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(13.dp), tint = Color(0xFF00E5FF))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("直接复制直链", fontSize = 11.sp, color = Color(0xFF00E5FF))
-                }
+                content(Modifier.fillMaxSize())
             }
+        }
+    } else {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp)
+                .height(260.dp),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.Black)
+        ) {
+            content(Modifier.fillMaxSize())
         }
     }
 }
