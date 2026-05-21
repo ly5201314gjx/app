@@ -17,6 +17,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -43,6 +45,7 @@ import androidx.compose.ui.graphics.*
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -89,10 +92,16 @@ fun MovieMainScreen() {
     val activeSource by viewModel.activeSource.collectAsStateWithLifecycle()
     
     val showFavoritesOnly by viewModel.showFavoritesOnly.collectAsStateWithLifecycle()
+    val showHistory by viewModel.showHistory.collectAsStateWithLifecycle()
+    val history by viewModel.history.collectAsStateWithLifecycle()
+    val recentSearches by viewModel.recentSearches.collectAsStateWithLifecycle()
     val showCategoryDialog by viewModel.showCategoryDialog.collectAsStateWithLifecycle()
     val showSourceDialog by viewModel.showSourceDialog.collectAsStateWithLifecycle()
     val selectedCategory by viewModel.selectedCategory.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
+
+    val collectionSearchQuery by viewModel.collectionSearchQuery.collectAsStateWithLifecycle()
+    val collectionSelectedTypeName by viewModel.collectionSelectedTypeName.collectAsStateWithLifecycle()
     
     val selectedVod by viewModel.selectedVod.collectAsStateWithLifecycle()
     val activePlayingUrl by viewModel.activePlayingUrl.collectAsStateWithLifecycle()
@@ -174,7 +183,20 @@ fun MovieMainScreen() {
                         HomeBrowsingDashboard(
                             activeSourceName = activeSource?.name ?: "1号 极速秒播专线",
                             showFavoritesOnly = showFavoritesOnly,
-                            onToggleFavorites = { viewModel.showFavoritesOnly.value = !showFavoritesOnly },
+                            onToggleFavorites = { 
+                                viewModel.showFavoritesOnly.value = !showFavoritesOnly 
+                                viewModel.showHistory.value = false
+                            },
+                            showHistoryOnly = showHistory,
+                            onToggleHistory = {
+                                viewModel.showHistory.value = !showHistory
+                                viewModel.showFavoritesOnly.value = false
+                            },
+                            history = history,
+                            recentSearches = recentSearches,
+                            onRemoveSearch = { viewModel.removeRecentSearch(it) },
+                            onClearHistory = { viewModel.clearAllHistory() },
+                            onDeleteHistoryItem = { viewModel.deleteHistoryItem(it) },
                             searchQuery = searchQuery,
                             onSearch = { viewModel.search(it) },
                             onClearSearch = { viewModel.clearSearch() },
@@ -192,6 +214,19 @@ fun MovieMainScreen() {
                             onPageChange = { viewModel.changePage(it) },
                             onSelectFavoriteVod = { fav ->
                                 viewModel.selectAndFetchDetails(fav.vodId, fav.vodName, fav.apiSourceUrl)
+                            },
+                            onSelectHistoryVod = { hist ->
+                                viewModel.selectAndFetchDetails(hist.vodId, hist.vodName, hist.apiSourceUrl)
+                            },
+                            collectionSearchQuery = collectionSearchQuery,
+                            onCollectionSearch = { viewModel.collectionSearchQuery.value = it },
+                            collectionSelectedTypeName = collectionSelectedTypeName,
+                            onCollectionTypeFilter = { viewModel.collectionSelectedTypeName.value = it },
+                            lastScrollIndex = viewModel.lastScrollIndex,
+                            lastScrollOffset = viewModel.lastScrollOffset,
+                            onUpdateScrollPosition = { index, offset ->
+                                viewModel.lastScrollIndex = index
+                                viewModel.lastScrollOffset = offset
                             }
                         )
                     }
@@ -202,7 +237,7 @@ fun MovieMainScreen() {
                 CategorySelectionDialog(
                     currentSelected = selectedCategory,
                     categories = categories,
-                    onSelect = { viewModel.selectCategory(it) },
+                    onSelect = { cat -> viewModel.selectCategory(cat) },
                     onDismiss = { viewModel.showCategoryDialog.value = false }
                 )
             }
@@ -231,6 +266,13 @@ fun HomeBrowsingDashboard(
     activeSourceName: String,
     showFavoritesOnly: Boolean,
     onToggleFavorites: () -> Unit,
+    showHistoryOnly: Boolean,
+    onToggleHistory: () -> Unit,
+    history: List<com.example.data.local.HistoryVod>,
+    recentSearches: List<com.example.data.local.SearchHistory>,
+    onRemoveSearch: (String) -> Unit,
+    onClearHistory: () -> Unit,
+    onDeleteHistoryItem: (Int) -> Unit,
     searchQuery: String,
     onSearch: (String) -> Unit,
     onClearSearch: () -> Unit,
@@ -243,9 +285,31 @@ fun HomeBrowsingDashboard(
     onToggleFav: (VodItem) -> Unit,
     onSelectVod: (VodItem) -> Unit,
     onSelectFavoriteVod: (FavoriteVod) -> Unit,
+    onSelectHistoryVod: (com.example.data.local.HistoryVod) -> Unit,
     currentPage: Int,
-    onPageChange: (Int) -> Unit
+    onPageChange: (Int) -> Unit,
+    collectionSearchQuery: String,
+    onCollectionSearch: (String) -> Unit,
+    collectionSelectedTypeName: String?,
+    onCollectionTypeFilter: (String?) -> Unit,
+    lastScrollIndex: Int,
+    lastScrollOffset: Int,
+    onUpdateScrollPosition: (Int, Int) -> Unit
 ) {
+    val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState(
+        initialFirstVisibleItemIndex = lastScrollIndex,
+        initialFirstVisibleItemScrollOffset = lastScrollOffset
+    )
+    
+    // Save scroll position when the component is disposed or when returning from details
+    // However, in Compose, it's easier to just update it when we go to details. 
+    // But since we are inside a Composable that might be replaced, we can use a side effect.
+    DisposableEffect(gridState) {
+        onDispose {
+            onUpdateScrollPosition(gridState.firstVisibleItemIndex, gridState.firstVisibleItemScrollOffset)
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -259,7 +323,11 @@ fun HomeBrowsingDashboard(
             selectedCategoryName = selectedCategoryName,
             showFavoritesOnly = showFavoritesOnly,
             onToggleFavorites = onToggleFavorites,
-            onTriggerSource = onTriggerSource
+            showHistoryOnly = showHistoryOnly,
+            onToggleHistory = onToggleHistory,
+            onTriggerSource = onTriggerSource,
+            recentSearches = recentSearches,
+            onRemoveSearch = onRemoveSearch
         )
 
         AnimatedVisibility(
@@ -305,24 +373,31 @@ fun HomeBrowsingDashboard(
                 .weight(1f)
                 .padding(horizontal = 12.dp)
         ) {
-            if (showFavoritesOnly) {
-                if (favorites.isEmpty()) {
-                    EmptyPlaceholder(icon = Icons.Default.FavoriteBorder, text = "收藏夹是空的\n去浏览页面点击海报下方的爱心收藏吧。")
-                } else {
-                    LazyVerticalGrid(
-                        columns = GridCells.Fixed(2),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        items(favorites) { favorite ->
-                            FavoriteVodGridCard(
-                                fav = favorite,
-                                onClick = { onSelectFavoriteVod(favorite) }
-                            )
+            if (showFavoritesOnly || showHistoryOnly) {
+                CollectionListView(
+                    isHistory = showHistoryOnly,
+                    items = if (showHistoryOnly) history else favorites,
+                    searchQuery = collectionSearchQuery,
+                    onSearch = onCollectionSearch,
+                    selectedTypeName = collectionSelectedTypeName,
+                    onTypeFilter = onCollectionTypeFilter,
+                    onSelectItem = { item ->
+                        if (showHistoryOnly) {
+                            onSelectHistoryVod(item as com.example.data.local.HistoryVod)
+                        } else {
+                            onSelectFavoriteVod(item as FavoriteVod)
                         }
-                    }
-                }
+                    },
+                    onDeleteItem = { id ->
+                        if (showHistoryOnly) {
+                            onDeleteHistoryItem(id)
+                        } else {
+                            // Can't delete directly from favoritelist view easily without changing state
+                            // Handled via the child view calls if needed
+                        }
+                    },
+                    onClearAll = if (showHistoryOnly) onClearHistory else null
+                )
             } else {
                 AnimatedContent(
                     targetState = uiState,
@@ -364,6 +439,7 @@ fun HomeBrowsingDashboard(
                                 EmptyPlaceholder(icon = Icons.Default.SearchOff, text = "未检索到相关资源")
                             } else {
                                 LazyVerticalGrid(
+                                    state = gridState,
                                     columns = GridCells.Fixed(2),
                                     verticalArrangement = Arrangement.spacedBy(12.dp),
                                     horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -377,7 +453,10 @@ fun HomeBrowsingDashboard(
                                                 vod = firstItem,
                                                 isFav = favoriteIds.contains(firstItem.vodId),
                                                 onToggleFav = { onToggleFav(firstItem) },
-                                                onClick = { onSelectVod(firstItem) }
+                                                onClick = { 
+                                                    onUpdateScrollPosition(gridState.firstVisibleItemIndex, gridState.firstVisibleItemScrollOffset)
+                                                    onSelectVod(firstItem) 
+                                                }
                                             )
                                         }
                                     }
@@ -390,7 +469,10 @@ fun HomeBrowsingDashboard(
                                                 vod = item,
                                                 isFav = favoriteIds.contains(item.vodId),
                                                 onToggleFav = { onToggleFav(item) },
-                                                onClick = { onSelectVod(item) },
+                                                onClick = { 
+                                                    onUpdateScrollPosition(gridState.firstVisibleItemIndex, gridState.firstVisibleItemScrollOffset)
+                                                    onSelectVod(item) 
+                                                },
                                                 isAlteredStyle = (index % 3 == 0) // Alternating styles
                                             )
                                         }
@@ -408,7 +490,7 @@ fun HomeBrowsingDashboard(
             }
         }
 
-        if (!showFavoritesOnly && uiState is MovieUiState.Success) {
+        if (!showFavoritesOnly && !showHistoryOnly && uiState is MovieUiState.Success) {
             val totalPages = uiState.response.pagecount?.toString()?.toDoubleOrNull()?.toInt() ?: 1
             PaginationControls(
                 currentPage = currentPage,
@@ -430,10 +512,16 @@ fun TopFunctionsBar(
     selectedCategoryName: String,
     showFavoritesOnly: Boolean,
     onToggleFavorites: () -> Unit,
-    onTriggerSource: () -> Unit
+    showHistoryOnly: Boolean,
+    onToggleHistory: () -> Unit,
+    onTriggerSource: () -> Unit,
+    recentSearches: List<com.example.data.local.SearchHistory>,
+    onRemoveSearch: (String) -> Unit
 ) {
     var isSearchingOpen by remember { mutableStateOf(false) }
     var localSearchText by remember { mutableStateOf(searchQuery) }
+    var showSearchHistory by remember { mutableStateOf(false) }
+    var showHistoryPopup by remember { mutableStateOf(false) }
     
     LaunchedEffect(searchQuery) {
         localSearchText = searchQuery
@@ -469,7 +557,7 @@ fun TopFunctionsBar(
                     selected = isSearchingOpen || searchQuery.isNotBlank(),
                     onClick = { isSearchingOpen = !isSearchingOpen },
                     activeColor = Color(0xFF1976D2),
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1.3f)
                 )
 
                 // Button 2: Category Picker
@@ -479,18 +567,56 @@ fun TopFunctionsBar(
                     selected = selectedCategoryName != "全部分类",
                     onClick = onTriggerCategory,
                     activeColor = Color(0xFFF57C00),
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1.2f)
                 )
 
-                // Button 3: Favorites Toggle
+                // Button 3: Favorites & History Toggle
                 TactileFuncButton(
-                    icon = if (showFavoritesOnly) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                    label = "看收藏",
-                    selected = showFavoritesOnly,
+                    icon = if (showFavoritesOnly) Icons.Default.Favorite else if (showHistoryOnly) Icons.Default.History else Icons.Default.FavoriteBorder,
+                    label = if (showHistoryOnly) "看历史" else "看收藏",
+                    selected = showFavoritesOnly || showHistoryOnly,
                     onClick = onToggleFavorites,
-                    activeColor = Color(0xFFD32F2F),
-                    modifier = Modifier.weight(1f)
+                    onLongClick = { showHistoryPopup = true },
+                    activeColor = if (showHistoryOnly) Color(0xFF5D4037) else Color(0xFFD32F2F),
+                    modifier = Modifier.weight(1.2f)
                 )
+                
+                if (showHistoryPopup) {
+                    androidx.compose.ui.window.Popup(
+                        alignment = Alignment.TopCenter,
+                        offset = androidx.compose.ui.unit.IntOffset(0, 100),
+                        onDismissRequest = { showHistoryPopup = false }
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = Color(0xEEFFFFFF),
+                            tonalElevation = 6.dp,
+                            border = BorderStroke(0.5.dp, Color.LightGray.copy(0.4f)),
+                            modifier = Modifier
+                                .width(120.dp)
+                                .padding(8.dp)
+                        ) {
+                            Column {
+                                ListItem(
+                                    headlineContent = { Text("历史录", fontSize = 13.sp, fontWeight = FontWeight.Bold) },
+                                    leadingContent = { Icon(Icons.Default.History, null, modifier = Modifier.size(16.dp)) },
+                                    modifier = Modifier.clickable {
+                                        onToggleHistory()
+                                        showHistoryPopup = false
+                                    }
+                                )
+                                ListItem(
+                                    headlineContent = { Text("收藏夹", fontSize = 13.sp, fontWeight = FontWeight.Bold) },
+                                    leadingContent = { Icon(Icons.Default.Favorite, null, modifier = Modifier.size(16.dp)) },
+                                    modifier = Modifier.clickable {
+                                        onToggleFavorites()
+                                        showHistoryPopup = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
 
                 // Button 4: Change Source Line
                 TactileFuncButton(
@@ -510,78 +636,122 @@ fun TopFunctionsBar(
             enter = expandVertically(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) + fadeIn(),
             exit = shrinkVertically(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) + fadeOut()
         ) {
-            Box(
+            Row(
                 modifier = Modifier
                     .padding(top = 8.dp)
-                    .fillMaxWidth(0.85f)
-                    .height(34.dp)
-                    .clip(CircleShape)
-                    .background(Color(0xFFF7F7F7))
-                    .border(0.5.dp, Color(0xFFE5E5E5), CircleShape)
+                    .fillMaxWidth(0.95f),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                androidx.compose.foundation.text.BasicTextField(
-                    value = localSearchText,
-                    onValueChange = { localSearchText = it },
-                    singleLine = true,
-                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, color = Color(0xFF424242)),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                    keyboardActions = KeyboardActions(onSearch = { onSearch(localSearchText.trim()) }),
-                    decorationBox = { innerTextField ->
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = 12.dp)
-                        ) {
-                            Icon(Icons.Default.Search, contentDescription = null, tint = Color(0xFFBDBDBD), modifier = Modifier.size(14.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Box(modifier = Modifier.weight(1f)) {
-                                if (localSearchText.isEmpty()) {
-                                    Text("寻找精彩...", fontSize = 12.sp, color = Color(0xFFBDBDBD))
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(34.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFFF7F7F7))
+                        .border(0.5.dp, Color(0xFFE5E5E5), CircleShape)
+                ) {
+                    androidx.compose.foundation.text.BasicTextField(
+                        value = localSearchText,
+                        onValueChange = { localSearchText = it },
+                        singleLine = true,
+                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, color = Color(0xFF424242)),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        keyboardActions = KeyboardActions(onSearch = { onSearch(localSearchText.trim()) }),
+                        decorationBox = { innerTextField ->
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(horizontal = 12.dp)
+                            ) {
+                                Icon(Icons.Default.Search, contentDescription = null, tint = Color(0xFFBDBDBD), modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Box(modifier = Modifier.weight(1f)) {
+                                    if (localSearchText.isEmpty()) {
+                                        Text("寻找精彩...", fontSize = 12.sp, color = Color(0xFFBDBDBD))
+                                    }
+                                    innerTextField()
                                 }
-                                innerTextField()
-                            }
-                            if (localSearchText.isNotEmpty()) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(18.dp)
-                                        .clip(CircleShape)
-                                        .background(Color(0xFFE0E0E0))
-                                        .clickable { 
-                                            localSearchText = ""
-                                            onClear()
-                                        },
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(Icons.Default.Close, contentDescription = "Clear", tint = Color(0xFF757575), modifier = Modifier.size(10.dp))
+                                if (localSearchText.isNotEmpty()) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(18.dp)
+                                            .clip(CircleShape)
+                                            .background(Color(0xFFE0E0E0))
+                                            .clickable { 
+                                                localSearchText = ""
+                                                onClear()
+                                            },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(Icons.Default.Close, contentDescription = "Clear", tint = Color(0xFF757575), modifier = Modifier.size(10.dp))
+                                    }
                                 }
                             }
                         }
-                    }
-                )
+                    )
+                }
+                
+                Spacer(modifier = Modifier.width(6.dp))
+                
+                // History Dropdown Toggle
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFFF7F7F7))
+                        .border(0.5.dp, Color(0xFFE5E5E5), CircleShape)
+                        .clickable { showSearchHistory = !showSearchHistory },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = if (showSearchHistory) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
+                        contentDescription = "Search History",
+                        tint = Color(0xFF757575)
+                    )
+                }
             }
+        }
+        
+        if (showSearchHistory && isSearchingOpen) {
+            SearchHistoryPopup(
+                history = recentSearches,
+                onSelect = { 
+                    localSearchText = it
+                    onSearch(it)
+                    showSearchHistory = false
+                },
+                onDelete = onRemoveSearch,
+                onDismiss = { showSearchHistory = false }
+            )
         }
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun TactileFuncButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
     selected: Boolean,
     onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
     activeColor: Color,
     modifier: Modifier = Modifier
 ) {
     Surface(
-        onClick = onClick,
         shape = RoundedCornerShape(12.dp),
         color = if (selected) activeColor.copy(alpha = 0.12f) else Color.Transparent,
         border = BorderStroke(
             width = 1.dp,
             color = if (selected) activeColor.copy(alpha = 0.4f) else Color.Transparent
         ),
-        modifier = modifier.height(38.dp)
+        modifier = modifier
+            .height(38.dp)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            )
     ) {
         Row(
             modifier = Modifier
@@ -1112,117 +1282,6 @@ fun FavoriteVodGridCard(
         }
     }
 }
-
-@Composable
-fun CategorySelectionDialog(
-    currentSelected: CategoryItem?,
-    categories: List<CategoryItem>,
-    onSelect: (CategoryItem?) -> Unit,
-    onDismiss: () -> Unit
-) {
-    Dialog(onDismissRequest = onDismiss) {
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 24.dp)
-                .wrapContentHeight()
-                .testTag("category_dialog_card"),
-            shape = RoundedCornerShape(26.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xF2FAF7F2)), // Sophisticated cream milk-glass
-            border = BorderStroke(
-                1.2.dp,
-                Brush.linearGradient(listOf(Color.White.copy(alpha = 0.9f), Color.White.copy(alpha = 0.2f)))
-            )
-        ) {
-            Column(
-                modifier = Modifier
-                    .padding(22.dp)
-                    .fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = "系统分类筛选",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Black,
-                    color = Color(0xFF24201A),
-                    modifier = Modifier.padding(bottom = 18.dp)
-                )
-
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(2),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 280.dp)
-                ) {
-                    item {
-                        CategoryGridButton(
-                            name = "全部影视",
-                            selected = currentSelected == null,
-                            onClick = { onSelect(null) }
-                        )
-                    }
-
-                    items(categories) { category ->
-                        CategoryGridButton(
-                            name = category.typeName,
-                            selected = currentSelected?.typeId == category.typeId,
-                            onClick = { onSelect(category) }
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                TextButton(
-                    onClick = onDismiss,
-                    modifier = Modifier.align(Alignment.End)
-                ) {
-                    Text("完成返回", color = Color(0xFFFCA524), fontWeight = FontWeight.Bold)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun CategoryGridButton(
-    name: String,
-    selected: Boolean,
-    onClick: () -> Unit
-) {
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(14.dp),
-        color = if (selected) Color(0xFFFCA524).copy(alpha = 0.15f) else Color(0x0A000000),
-        contentColor = if (selected) Color(0xFFFCA524) else Color(0xFF5C5246),
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(46.dp)
-            .border(
-                1.5.dp,
-                if (selected) {
-                    Brush.horizontalGradient(listOf(Color(0xFFFCA524), Color(0xFFFF9800)))
-                } else {
-                    Brush.linearGradient(listOf(Color.White.copy(alpha = 0.8f), Color.Transparent))
-                },
-                RoundedCornerShape(14.dp)
-            )
-    ) {
-        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-            Text(
-                text = name,
-                fontSize = 12.sp,
-                fontWeight = if (selected) FontWeight.Black else FontWeight.SemiBold,
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-    }
-}
-
 @Composable
 fun SourceManagementDialog(
     activeSource: ApiSource?,
@@ -2010,10 +2069,40 @@ fun EmbeddedVideoSection(
                 decorFitsSystemWindows = false
             )
         ) {
+            val context = androidx.compose.ui.platform.LocalContext.current
+            val audioManager = context.getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
+            
+            androidx.compose.runtime.DisposableEffect(Unit) {
+                val window = (context as? android.app.Activity)?.window
+                if (window != null) {
+                    val controller = androidx.core.view.WindowCompat.getInsetsController(window, window.decorView)
+                    controller.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                    controller.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+                }
+                onDispose {
+                    val window = (context as? android.app.Activity)?.window
+                    if (window != null) {
+                        val controller = androidx.core.view.WindowCompat.getInsetsController(window, window.decorView)
+                        controller.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+                    }
+                }
+            }
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(Color.Black)
+                    .pointerInput(Unit) {
+                        detectDragGestures { change, dragAmount ->
+                            if (change.position.x > size.width / 2) {
+                                // Right side: Volume
+                                val delta = -dragAmount.y / size.height
+                                val currentVolume = audioManager.getStreamVolume(android.media.AudioManager.STREAM_MUSIC)
+                                val maxVolume = audioManager.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC)
+                                val newVolume = (currentVolume + delta * maxVolume).toInt().coerceIn(0, maxVolume)
+                                audioManager.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, newVolume, 0)
+                            }
+                        }
+                    }
             ) {
                 content(Modifier.fillMaxSize())
             }
@@ -2502,6 +2591,326 @@ fun FooterSection() {
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun SearchHistoryPopup(
+    history: List<com.example.data.local.SearchHistory>,
+    onSelect: (String) -> Unit,
+    onDelete: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    androidx.compose.ui.window.Popup(
+        alignment = Alignment.TopCenter,
+        offset = androidx.compose.ui.unit.IntOffset(0, 150),
+        onDismissRequest = onDismiss
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth(0.9f)
+                .heightIn(max = 240.dp)
+                .padding(8.dp),
+            shape = RoundedCornerShape(16.dp),
+            color = Color(0xF0FFFFFF),
+            tonalElevation = 8.dp,
+            border = BorderStroke(0.5.dp, Color.LightGray.copy(0.4f))
+        ) {
+            Column(modifier = Modifier.padding(12.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("最近搜索", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF616161))
+                    Text(
+                        "清除全部",
+                        fontSize = 11.sp,
+                        color = Color(0xFF1976D2),
+                        modifier = Modifier.clickable { /* Handled via parent */ } 
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                LazyColumn(modifier = Modifier.weight(1f)) {
+                    items(history) { item ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onSelect(item.query) }
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.History, null, modifier = Modifier.size(14.dp), tint = Color(0xFF9E9E9E))
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Text(item.query, fontSize = 13.sp, color = Color(0xFF424242))
+                            }
+                            IconButton(onClick = { onDelete(item.query) }, modifier = Modifier.size(18.dp)) {
+                                Icon(Icons.Default.Close, null, modifier = Modifier.size(14.dp), tint = Color(0xFFBDBDBD))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun CollectionListView(
+    isHistory: Boolean,
+    items: List<Any>,
+    searchQuery: String,
+    onSearch: (String) -> Unit,
+    selectedTypeName: String?,
+    onTypeFilter: (String?) -> Unit,
+    onSelectItem: (Any) -> Unit,
+    onDeleteItem: (Int) -> Unit,
+    onClearAll: (() -> Unit)? = null
+) {
+    val filteredItems = remember(items, searchQuery, selectedTypeName) {
+        items.filter { item ->
+            val name = if (item is FavoriteVod) item.vodName else (item as com.example.data.local.HistoryVod).vodName
+            val type = if (item is FavoriteVod) item.typeName else (item as com.example.data.local.HistoryVod).typeName
+            val matchesSearch = name.contains(searchQuery, ignoreCase = true)
+            val matchesType = selectedTypeName == null || type == selectedTypeName
+            matchesSearch && matchesType
+        }
+    }
+    
+    val allTypes = remember(items) {
+        items.mapNotNull { 
+            if (it is FavoriteVod) it.typeName else (it as com.example.data.local.HistoryVod).typeName 
+        }.distinct()
+    }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                if (isHistory) "播放历史录" else "我的全站收藏",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = Color(0xFF24201A)
+            )
+            if (isHistory && onClearAll != null) {
+                TextButton(onClick = onClearAll) {
+                    Text("清空历史", color = Color(0xFFD32F2F), fontSize = 12.sp)
+                }
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(8.dp))
+        
+        // Secondary Controls
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(30.dp)
+                    .clip(CircleShape)
+                    .background(Color(0x0A000000))
+                    .padding(horizontal = 10.dp),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                androidx.compose.foundation.text.BasicTextField(
+                    value = searchQuery,
+                    onValueChange = onSearch,
+                    singleLine = true,
+                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp),
+                    decorationBox = { inner ->
+                        if (searchQuery.isEmpty()) Text("在我的库中检索...", fontSize = 11.sp, color = Color(0x66000000))
+                        inner()
+                    }
+                )
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(6.dp))
+        
+        // Horizontal Type Chip Filter
+        androidx.compose.foundation.lazy.LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            contentPadding = PaddingValues(bottom = 8.dp)
+        ) {
+            item {
+                CollectionTypeChip("全部", selectedTypeName == null) { onTypeFilter(null) }
+            }
+            items(allTypes) { type ->
+                CollectionTypeChip(type, selectedTypeName == type) { onTypeFilter(type) }
+            }
+        }
+
+        if (filteredItems.isEmpty()) {
+            EmptyPlaceholder(
+                icon = if (isHistory) Icons.Default.History else Icons.Default.FavoriteBorder,
+                text = "未找到匹配项"
+            )
+        } else {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                items(filteredItems) { item ->
+                    if (item is FavoriteVod) {
+                        FavoriteVodGridCard(fav = item, onClick = { onSelectItem(item) })
+                    } else {
+                        val hist = item as com.example.data.local.HistoryVod
+                        HistoryVodGridCard(
+                            hist = hist,
+                            onClick = { onSelectItem(hist) },
+                            onDelete = { onDeleteItem(hist.vodId) }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun CollectionTypeChip(text: String, selected: Boolean, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(6.dp),
+        color = if (selected) Color(0xFFFCA524) else Color(0x0A000000),
+        modifier = Modifier.height(24.dp)
+    ) {
+        Text(
+            text = text,
+            fontSize = 10.sp,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+            color = if (selected) Color.White else Color(0xFF5C5246),
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+        )
+    }
+}
+
+@Composable
+fun HistoryVodGridCard(
+    hist: com.example.data.local.HistoryVod,
+    onClick: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(180.dp)
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            AsyncImage(
+                model = hist.vodPic,
+                contentDescription = hist.vodName,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(0.7f))))
+            )
+            IconButton(
+                onClick = onDelete,
+                modifier = Modifier.align(Alignment.TopEnd).size(24.dp).padding(4.dp).background(Color.Black.copy(0.4f), CircleShape)
+            ) {
+                Icon(Icons.Default.Delete, null, tint = Color.White, modifier = Modifier.size(12.dp))
+            }
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(8.dp)
+            ) {
+                Text(hist.vodName, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                Text(hist.typeName ?: "", color = Color.White.copy(0.7f), fontSize = 9.sp)
+            }
+        }
+    }
+}
+
+@Composable
+fun CategorySelectionDialog(
+    currentSelected: CategoryItem?,
+    categories: List<CategoryItem>,
+    onSelect: (CategoryItem?) -> Unit,
+    onDismiss: () -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth(0.85f)
+                .heightIn(max = 400.dp),
+            shape = RoundedCornerShape(24.dp),
+            color = Color(0xF0FAF7F2),
+            tonalElevation = 8.dp,
+            border = BorderStroke(1.dp, Color.White.copy(0.4f))
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    "多维内容分类",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = Color(0xFF24201A)
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                LazyColumn(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    item {
+                        CategoryOptionItem(
+                            label = "全部分类",
+                            selected = currentSelected == null,
+                            onClick = { onSelect(null) }
+                        )
+                    }
+                    items(categories) { category ->
+                        CategoryOptionItem(
+                            label = category.typeName,
+                            selected = currentSelected?.typeId == category.typeId,
+                            onClick = { onSelect(category) }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun CategoryOptionItem(label: String, selected: Boolean, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth().height(42.dp),
+        shape = RoundedCornerShape(12.dp),
+        color = if (selected) Color(0xFFFCA524).copy(alpha = 0.15f) else Color.Transparent,
+        border = if (selected) BorderStroke(1.dp, Color(0xFFFCA524).copy(0.4f)) else null
+    ) {
+        Row(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = label,
+                fontSize = 13.sp,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                color = if (selected) Color(0xFFE65100) else Color(0xFF5C5246)
+            )
+            if (selected) {
+                Icon(Icons.Default.CheckCircle, null, tint = Color(0xFFFCA524), modifier = Modifier.size(16.dp))
             }
         }
     }

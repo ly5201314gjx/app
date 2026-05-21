@@ -53,3 +53,33 @@ interface ApiSourceDao {
         activateUrl(url)
     }
 }
+
+@Dao
+interface HistoryDao {
+    @Query("SELECT * FROM history ORDER BY timestamp DESC")
+    fun getAllHistory(): Flow<List<HistoryVod>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertHistory(vod: HistoryVod)
+
+    @Query("DELETE FROM history WHERE vodId = :vodId")
+    suspend fun deleteHistoryById(vodId: Int)
+
+    @Query("DELETE FROM history")
+    suspend fun clearAllHistory()
+}
+
+@Dao
+interface SearchHistoryDao {
+    @Query("SELECT * FROM search_history ORDER BY timestamp DESC LIMIT 20")
+    fun getRecentSearches(): Flow<List<SearchHistory>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSearch(search: SearchHistory)
+
+    @Query("DELETE FROM search_history WHERE `query` = :query")
+    suspend fun deleteSearch(query: String)
+
+    @Query("DELETE FROM search_history")
+    suspend fun clearSearchHistory()
+}

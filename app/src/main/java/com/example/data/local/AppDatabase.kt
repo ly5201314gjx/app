@@ -9,10 +9,12 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
-@Database(entities = [FavoriteVod::class, ApiSource::class], version = 1, exportSchema = false)
+@Database(entities = [FavoriteVod::class, ApiSource::class, HistoryVod::class, SearchHistory::class], version = 2, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun favoriteDao(): FavoriteDao
     abstract fun apiSourceDao(): ApiSourceDao
+    abstract fun historyDao(): HistoryDao
+    abstract fun searchHistoryDao(): SearchHistoryDao
 
     companion object {
         @Volatile

@@ -32,6 +32,8 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
         repository = MovieRepository(
             favoriteDao = database.favoriteDao(),
             apiSourceDao = database.apiSourceDao(),
+            historyDao = database.historyDao(),
+            searchHistoryDao = database.searchHistoryDao(),
             maccmsService = MaccmsService.create()
         )
         
@@ -49,6 +51,12 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
     val favoriteIds: StateFlow<List<Int>> = repository.allFavoriteIds
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val history: StateFlow<List<com.example.data.local.HistoryVod>> = repository.allHistory
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val recentSearches: StateFlow<List<com.example.data.local.SearchHistory>> = repository.recentSearches
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     val apiSources: StateFlow<List<ApiSource>> = repository.allSources
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -64,13 +72,22 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
     
     // UI Layout controllers
     val showFavoritesOnly = MutableStateFlow(false)
+    val showHistory = MutableStateFlow(false)
     val showCategoryDialog = MutableStateFlow(false)
     val showSourceDialog = MutableStateFlow(false)
     
+    // Secondary search/filter for Collections (Favorites/History)
+    val collectionSearchQuery = MutableStateFlow("")
+    val collectionSelectedTypeName = MutableStateFlow<String?>(null)
+
     // Details & Playing state
     val selectedVod = MutableStateFlow<VodItem?>(null)
     val activePlayingUrl = MutableStateFlow<String?>(null)
     val activePlayingTitle = MutableStateFlow<String?>(null)
+
+    // Scroll Position Persistence
+    var lastScrollIndex = 0
+    var lastScrollOffset = 0
 
     // Api Categories compiled from remote response on load
     private val _categories = MutableStateFlow<List<CategoryItem>>(getDefaultFallbackCategories())
@@ -142,6 +159,8 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
                     val allSrcs = apiSources.value
                     fullVodItem.apiSourceName = allSrcs.find { it.url == sourceUrl }?.name ?: "专线"
                     selectedVod.value = fullVodItem
+                    // Record History
+                    repository.addHistory(fullVodItem, sourceUrl)
                 } else {
                     // Fallback search by name if ID did not match across sources
                     selectedVod.value = null
@@ -239,6 +258,25 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
         searchQuery.value = query
         currentPage.value = 1
         loadMovies()
+        if (query.isNotBlank()) {
+            viewModelScope.launch { repository.addSearch(query) }
+        }
+    }
+
+    fun removeRecentSearch(query: String) {
+        viewModelScope.launch { repository.removeSearch(query) }
+    }
+
+    fun clearRecentSearches() {
+        viewModelScope.launch { repository.clearSearchHistory() }
+    }
+
+    fun deleteHistoryItem(vodId: Int) {
+        viewModelScope.launch { repository.deleteHistory(vodId) }
+    }
+
+    fun clearAllHistory() {
+        viewModelScope.launch { repository.clearHistory() }
     }
 
     fun clearSearch() {

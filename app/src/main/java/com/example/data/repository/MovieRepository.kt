@@ -15,11 +15,17 @@ import kotlinx.coroutines.withContext
 class MovieRepository(
     private val favoriteDao: FavoriteDao,
     private val apiSourceDao: ApiSourceDao,
+    private val historyDao: com.example.data.local.HistoryDao,
+    private val searchHistoryDao: com.example.data.local.SearchHistoryDao,
     private val maccmsService: MaccmsService
 ) {
     // Favorites Streams & Operations
     val allFavorites: Flow<List<FavoriteVod>> = favoriteDao.getAllFavorites()
     val allFavoriteIds: Flow<List<Int>> = favoriteDao.getAllFavoriteIds()
+
+    // History Streams & Operations
+    val allHistory: Flow<List<com.example.data.local.HistoryVod>> = historyDao.getAllHistory()
+    val recentSearches: Flow<List<com.example.data.local.SearchHistory>> = searchHistoryDao.getRecentSearches()
 
     suspend fun addFavorite(vod: VodItem, sourceUrl: String) = withContext(Dispatchers.IO) {
         val favorite = FavoriteVod(
@@ -38,6 +44,41 @@ class MovieRepository(
         favoriteDao.deleteFavoriteById(vodId)
     }
 
+    suspend fun addHistory(vod: VodItem, sourceUrl: String) = withContext(Dispatchers.IO) {
+        val history = com.example.data.local.HistoryVod(
+            vodId = vod.vodId,
+            vodName = vod.vodName,
+            vodPic = vod.vodPic,
+            vodRemarks = vod.vodRemarks,
+            typeName = vod.typeName,
+            apiSourceUrl = sourceUrl,
+            timestamp = System.currentTimeMillis()
+        )
+        historyDao.insertHistory(history)
+    }
+
+    suspend fun deleteHistory(vodId: Int) = withContext(Dispatchers.IO) {
+        historyDao.deleteHistoryById(vodId)
+    }
+
+    suspend fun clearHistory() = withContext(Dispatchers.IO) {
+        historyDao.clearAllHistory()
+    }
+
+    suspend fun addSearch(query: String) = withContext(Dispatchers.IO) {
+        if (query.isNotBlank()) {
+            searchHistoryDao.insertSearch(com.example.data.local.SearchHistory(query))
+        }
+    }
+
+    suspend fun removeSearch(query: String) = withContext(Dispatchers.IO) {
+        searchHistoryDao.deleteSearch(query)
+    }
+
+    suspend fun clearSearchHistory() = withContext(Dispatchers.IO) {
+        searchHistoryDao.clearSearchHistory()
+    }
+
     fun isFavoriteFlow(vodId: Int): Flow<Boolean> = favoriteDao.isFavoriteFlow(vodId)
     suspend fun isFavorite(vodId: Int): Boolean = withContext(Dispatchers.IO) {
         favoriteDao.isFavorite(vodId)
@@ -53,8 +94,8 @@ class MovieRepository(
             "https://cj.lziapi.com/api.php/provide/vod/",
             "https://cj.ffzyapi.com/api.php/provide/vod/",
             "https://suoniapi.com/api.php/provide/vod/",
-            "https://cj.jyzyapi.com/api.php/provide/vod/",
-            "https://cj.speedbyg.com/api.php/provide/vod/"
+            "https://api.ikunzy.com/api.php/provide/vod/",
+            "http://api.pingfan.xyz/api.php/provide/vod/"
         )
         val missingUrls = defaultUrls.filter { url -> sources.none { it.url == url } }
         if (missingUrls.isNotEmpty()) {
@@ -62,8 +103,8 @@ class MovieRepository(
                 ApiSource("https://cj.lziapi.com/api.php/provide/vod/", "1号 极速秒播专线", isDefault = true, isActive = true),
                 ApiSource("https://cj.ffzyapi.com/api.php/provide/vod/", "2号 非凡高清专线", isDefault = true, isActive = false),
                 ApiSource("https://suoniapi.com/api.php/provide/vod/", "3号 索尼臻彩专线", isDefault = true, isActive = false),
-                ApiSource("https://cj.jyzyapi.com/api.php/provide/vod/", "4号 金鹰优质专线", isDefault = true, isActive = false),
-                ApiSource("https://cj.speedbyg.com/api.php/provide/vod/", "5号 快播硬核专线", isDefault = true, isActive = false)
+                ApiSource("https://api.ikunzy.com/api.php/provide/vod/", "4号 爱坤4K专线", isDefault = true, isActive = false),
+                ApiSource("http://api.pingfan.xyz/api.php/provide/vod/", "5号 平凡4K专线", isDefault = true, isActive = false)
             )
             val toInsert = defaults.filter { missingUrls.contains(it.url) }
             val activeExists = sources.any { it.isActive }
