@@ -316,7 +316,7 @@ fun HomeBrowsingDashboard(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(top = 10.dp)
+            .padding(top = 2.dp)
     ) {
         TopFunctionsBar(
             searchQuery = searchQuery,
@@ -1130,40 +1130,42 @@ fun VodGridCard(
                 contentScale = ContentScale.Crop
             )
 
-            // Dynamic quality status indicator with glass sticker style
-            if (!vod.vodRemarks.isNullOrBlank()) {
-                Surface(
-                    color = Color(0xEBFFFAF0),
-                    shape = RoundedCornerShape(bottomStart = 10.dp),
-                    border = BorderStroke(0.5.dp, Color(0xFFFCA524).copy(alpha = 0.4f)),
-                    modifier = Modifier.align(Alignment.TopEnd)
-                ) {
-                    Text(
-                        text = vod.vodRemarks,
-                        color = Color(0xFFE65100),
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Black,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
-                    )
-                }
+            // Semi-transparent overlay for title and info
+            var showQuickPeek by remember { mutableStateOf(false) }
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.BottomCenter)
+                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.6f))))
+                    .padding(6.dp)
+                    .clickable { showQuickPeek = true }
+            ) {
+                Text(
+                    text = vod.vodName,
+                    color = Color.White,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
 
-            if (!vod.typeName.isNullOrBlank()) {
-                Surface(
-                    color = Color(0xEBF0FAF2),
-                    shape = RoundedCornerShape(topStart = 8.dp, bottomEnd = 8.dp),
-                    border = BorderStroke(0.5.dp, Color(0xFF4CAF50).copy(alpha = 0.3f)),
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(6.dp)
-                ) {
-                    Text(
-                        text = vod.typeName,
-                        color = Color(0xFF2E7D32),
-                        fontSize = 8.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
-                    )
+            if (showQuickPeek) {
+                androidx.compose.ui.window.Dialog(onDismissRequest = { showQuickPeek = false }) {
+                    Surface(
+                        modifier = Modifier.padding(16.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        color = Color(0xFFFDFBF7),
+                        border = BorderStroke(1.dp, Color(0xFFD7CCC8))
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(text = vod.vodName, color = Color(0xFF24201A), fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(text = "主演: ${vod.vodActor ?: "暂无"}", color = Color(0xFF6E6356), fontSize = 12.sp)
+                            Text(text = "分类: ${vod.typeName ?: "未知"}", color = Color(0xFF6E6356), fontSize = 12.sp)
+                            Text(text = "备注: ${vod.vodRemarks ?: "暂无"}", color = Color(0xFF8C7F6E), fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                        }
+                    }
                 }
             }
 
@@ -2057,12 +2059,7 @@ fun EmbeddedVideoSection(
                         factory = { ctx ->
                             androidx.media3.ui.PlayerView(ctx).apply {
                                 player = exoPlayer
-                                useController = true
-                                setShowNextButton(false)
-                                setShowPreviousButton(false)
-                                setShowFastForwardButton(true)
-                                setShowRewindButton(true)
-                                controllerShowTimeoutMs = 3000
+                                useController = false
                                 setKeepScreenOn(true)
                             }
                         },
