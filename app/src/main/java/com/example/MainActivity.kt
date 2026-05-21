@@ -1130,25 +1130,7 @@ fun VodGridCard(
                 contentScale = ContentScale.Crop
             )
 
-            // Semi-transparent overlay for title and info
             var showQuickPeek by remember { mutableStateOf(false) }
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .align(Alignment.BottomCenter)
-                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.6f))))
-                    .padding(6.dp)
-                    .clickable { showQuickPeek = true }
-            ) {
-                Text(
-                    text = vod.vodName,
-                    color = Color.White,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
 
             if (showQuickPeek) {
                 androidx.compose.ui.window.Dialog(onDismissRequest = { showQuickPeek = false }) {
@@ -1189,40 +1171,19 @@ fun VodGridCard(
                 )
             }
 
-            // Glassmorphic floating caption capsule
-            Column(
+            Text(
+                text = vod.vodName,
+                color = Color(0xFFFCA524),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .padding(6.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(Color(0xF5FAF7F2)) // Sophisticated micro glass content overlay
-                    .border(
-                        1.dp,
-                        Brush.linearGradient(listOf(Color.White, Color.White.copy(alpha = 0.3f))),
-                        RoundedCornerShape(14.dp)
-                    )
-                    .padding(horizontal = 8.dp, vertical = 5.dp)
-            ) {
-                Text(
-                    text = vod.vodName,
-                    color = Color(0xFF24201A),
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Black,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                if (!vod.vodActor.isNullOrBlank()) {
-                    Text(
-                        text = "主演: ${vod.vodActor}",
-                        color = Color(0xFF6E6356),
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
+                    .padding(12.dp)
+                    .clickable { showQuickPeek = true }
+            )
         }
     }
 }
@@ -2059,7 +2020,7 @@ fun EmbeddedVideoSection(
                         factory = { ctx ->
                             androidx.media3.ui.PlayerView(ctx).apply {
                                 player = exoPlayer
-                                useController = false
+                                useController = true
                                 setKeepScreenOn(true)
                             }
                         },
@@ -2074,30 +2035,6 @@ fun EmbeddedVideoSection(
                                 .fillMaxSize()
                                 .pointerInput(Unit) {
                                     detectTapGestures(onTap = { /* Prevent touches passing through */ })
-                                }
-                            )
-                        } else {
-                            // Top 75% absorbs drags for seeking, bottom 25% allowed for ExoPlayer Controller
-                            var dragPosition by remember { mutableLongStateOf(-1L) }
-                            Box(modifier = Modifier
-                                .fillMaxWidth()
-                                .fillMaxHeight(0.75f)
-                                .align(Alignment.TopCenter)
-                                .pointerInput(Unit) {
-                                    detectDragGestures(
-                                        onDragStart = { dragPosition = exoPlayer.currentPosition },
-                                        onDrag = { change, dragAmount -> 
-                                            change.consume()
-                                            if (dragPosition != -1L) {
-                                                val duration = exoPlayer.duration.coerceAtLeast(0L)
-                                                dragPosition += (dragAmount.x * 600).toLong() 
-                                                dragPosition = dragPosition.coerceIn(0L, duration)
-                                                exoPlayer.seekTo(dragPosition)
-                                            }
-                                        },
-                                        onDragEnd = { dragPosition = -1L },
-                                        onDragCancel = { dragPosition = -1L }
-                                    )
                                 }
                             )
                         }
@@ -2121,6 +2058,7 @@ fun EmbeddedVideoSection(
             }
         }
     }
+
 
     if (isFullScreen) {
         androidx.compose.ui.window.Dialog(

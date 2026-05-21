@@ -50,6 +50,10 @@ data class VodItem(
             val srcUrlString = sources[i]
             val srcName = sourceNames.getOrNull(i) ?: "播放源${i + 1}"
             
+            // Filter out problematic sources
+            if (srcName.contains("feifan", ignoreCase = true) || 
+                srcName.contains("liangzi", ignoreCase = true)) continue
+            
             // Episodes are separated by #
             val episodes = srcUrlString.split("#")
             for (ep in episodes) {
