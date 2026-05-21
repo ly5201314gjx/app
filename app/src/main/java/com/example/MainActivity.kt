@@ -20,6 +20,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -739,16 +741,35 @@ fun TactileFuncButton(
     activeColor: Color,
     modifier: Modifier = Modifier
 ) {
+    val interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.88f else if (selected) 1.02f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow)
+    )
+    val bgColor by animateColorAsState(
+        targetValue = if (selected) activeColor else if (isPressed) Color(0x1A000000) else Color(0x08000000),
+        animationSpec = tween(200)
+    )
+    val contentColor by animateColorAsState(
+        targetValue = if (selected) Color.White else Color(0xFF4A3E31),
+        animationSpec = tween(200)
+    )
+
     Surface(
         shape = RoundedCornerShape(12.dp),
-        color = if (selected) activeColor.copy(alpha = 0.12f) else Color.Transparent,
+        color = bgColor,
+        shadowElevation = if (selected) 4.dp else 0.dp,
         border = BorderStroke(
             width = 1.dp,
-            color = if (selected) activeColor.copy(alpha = 0.4f) else Color.Transparent
+            color = if (selected) activeColor else Color.Transparent
         ),
         modifier = modifier
             .height(38.dp)
+            .scale(scale)
             .combinedClickable(
+                interactionSource = interactionSource,
+                indication = androidx.compose.material3.ripple(),
                 onClick = onClick,
                 onLongClick = onLongClick
             )
@@ -763,7 +784,7 @@ fun TactileFuncButton(
             Icon(
                 imageVector = icon,
                 contentDescription = label,
-                tint = if (selected) activeColor else Color(0xFF4A3E31),
+                tint = contentColor,
                 modifier = Modifier.size(15.dp)
             )
             Spacer(modifier = Modifier.width(4.dp))
@@ -771,7 +792,7 @@ fun TactileFuncButton(
                 text = label,
                 fontSize = 11.sp,
                 fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                color = if (selected) activeColor else Color(0xFF4A3E31),
+                color = contentColor,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -1919,19 +1940,7 @@ fun EmbeddedVideoSection(
     }
 
     val activity = context as? android.app.Activity
-    DisposableEffect(isFullScreen) {
-        if (isFullScreen) {
-            activity?.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-        } else {
-            activity?.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-        }
-        onDispose {
-            if (isFullScreen) {
-                activity?.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-            }
-        }
-    }
-
+    
     DisposableEffect(url) {
         val uri = Uri.parse(url)
         val mediaItemBuilder = androidx.media3.common.MediaItem.Builder().setUri(uri)
@@ -2071,38 +2080,31 @@ fun EmbeddedVideoSection(
         ) {
             val context = androidx.compose.ui.platform.LocalContext.current
             val audioManager = context.getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
+            val view = androidx.compose.ui.platform.LocalView.current
             
-            androidx.compose.runtime.DisposableEffect(Unit) {
-                val window = (context as? android.app.Activity)?.window
-                if (window != null) {
-                    val controller = androidx.core.view.WindowCompat.getInsetsController(window, window.decorView)
+            androidx.compose.runtime.DisposableEffect(view) {
+                val activity = context as? android.app.Activity
+                val originalOrientation = activity?.requestedOrientation ?: android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                activity?.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+
+                val dialogWindow = (view.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window
+                dialogWindow?.setLayout(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT)
+                dialogWindow?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.BLACK))
+                
+                if (dialogWindow != null) {
+                    val controller = androidx.core.view.WindowCompat.getInsetsController(dialogWindow, view)
                     controller.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
                     controller.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
                 }
+
                 onDispose {
-                    val window = (context as? android.app.Activity)?.window
-                    if (window != null) {
-                        val controller = androidx.core.view.WindowCompat.getInsetsController(window, window.decorView)
-                        controller.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
-                    }
+                    activity?.requestedOrientation = originalOrientation
                 }
             }
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(Color.Black)
-                    .pointerInput(Unit) {
-                        detectDragGestures { change, dragAmount ->
-                            if (change.position.x > size.width / 2) {
-                                // Right side: Volume
-                                val delta = -dragAmount.y / size.height
-                                val currentVolume = audioManager.getStreamVolume(android.media.AudioManager.STREAM_MUSIC)
-                                val maxVolume = audioManager.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC)
-                                val newVolume = (currentVolume + delta * maxVolume).toInt().coerceIn(0, maxVolume)
-                                audioManager.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, newVolume, 0)
-                            }
-                        }
-                    }
             ) {
                 content(Modifier.fillMaxSize())
             }
@@ -2865,9 +2867,12 @@ fun CategorySelectionDialog(
                     color = Color(0xFF24201A)
                 )
                 Spacer(modifier = Modifier.height(12.dp))
-                LazyColumn(
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
                     modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(bottom = 8.dp)
                 ) {
                     item {
                         CategoryOptionItem(

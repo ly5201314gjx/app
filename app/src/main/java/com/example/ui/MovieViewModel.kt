@@ -103,11 +103,8 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             activeSource.collect { source ->
                 if (source != null) {
-                    // Load standard view if idle
-                    if (uiState.value is MovieUiState.Idle) {
-                        loadMovies()
-                        loadCategoriesForActiveSource(source.url)
-                    }
+                    loadCategoriesForActiveSource(source.url)
+                    loadMovies()
                 }
             }
         }
@@ -116,12 +113,7 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
     private fun loadCategoriesForActiveSource(sourceUrl: String) {
         viewModelScope.launch {
             try {
-                val response = repository.fetchVodList(
-                    baseUrl = sourceUrl,
-                    pg = 1,
-                    categoryId = null,
-                    keyword = null
-                )
+                val response = repository.fetchCategories(baseUrl = sourceUrl)
                 val fetched = response.classList
                 if (!fetched.isNullOrEmpty()) {
                     _categories.value = fetched
@@ -238,12 +230,7 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
                         item.apiSourceName = source.name
                     }
                     
-                    // Keep loaded categories in VM state so category picker has them
-                    response.classList?.let { list ->
-                        if (list.isNotEmpty()) {
-                            _categories.value = list
-                        }
-                    }
+                    // Do not override categories from fetchVodList as it may have empty classList
                     _uiState.value = MovieUiState.Success(response)
                 }
             } catch (e: Exception) {

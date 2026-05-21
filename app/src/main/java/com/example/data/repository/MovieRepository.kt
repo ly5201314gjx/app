@@ -94,8 +94,8 @@ class MovieRepository(
             "https://cj.lziapi.com/api.php/provide/vod/",
             "https://cj.ffzyapi.com/api.php/provide/vod/",
             "https://suoniapi.com/api.php/provide/vod/",
-            "https://api.ikunzy.com/api.php/provide/vod/",
-            "http://api.pingfan.xyz/api.php/provide/vod/"
+            "https://api.apibdzy.com/api.php/provide/vod/",
+            "https://cj.wlzy.tv/api.php/provide/vod/"
         )
         val missingUrls = defaultUrls.filter { url -> sources.none { it.url == url } }
         if (missingUrls.isNotEmpty()) {
@@ -103,8 +103,8 @@ class MovieRepository(
                 ApiSource("https://cj.lziapi.com/api.php/provide/vod/", "1号 极速秒播专线", isDefault = true, isActive = true),
                 ApiSource("https://cj.ffzyapi.com/api.php/provide/vod/", "2号 非凡高清专线", isDefault = true, isActive = false),
                 ApiSource("https://suoniapi.com/api.php/provide/vod/", "3号 索尼臻彩专线", isDefault = true, isActive = false),
-                ApiSource("https://api.ikunzy.com/api.php/provide/vod/", "4号 爱坤4K专线", isDefault = true, isActive = false),
-                ApiSource("http://api.pingfan.xyz/api.php/provide/vod/", "5号 平凡4K专线", isDefault = true, isActive = false)
+                ApiSource("https://api.apibdzy.com/api.php/provide/vod/", "4号 百度4K专线", isDefault = true, isActive = false),
+                ApiSource("https://cj.wlzy.tv/api.php/provide/vod/", "5号 卧龙稳定专线", isDefault = true, isActive = false)
             )
             val toInsert = defaults.filter { missingUrls.contains(it.url) }
             val activeExists = sources.any { it.isActive }
@@ -158,6 +158,13 @@ class MovieRepository(
     }
 
     // Fetch from Web Api
+    suspend fun fetchCategories(baseUrl: String): MaccmsResponse = withContext(Dispatchers.IO) {
+        val options = mutableMapOf<String, String>()
+        options["ac"] = "list"
+        options["out"] = "json"
+        maccmsService.getVodData(baseUrl, options)
+    }
+
     suspend fun fetchVodList(
         baseUrl: String,
         pg: Int,
@@ -166,6 +173,7 @@ class MovieRepository(
     ): MaccmsResponse = withContext(Dispatchers.IO) {
         val options = mutableMapOf<String, String>()
         options["ac"] = "detail"
+        options["out"] = "json"
         options["pg"] = pg.toString()
         options["pagesize"] = "40"
         options["limit"] = "40"
