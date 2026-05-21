@@ -18,6 +18,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -442,14 +443,14 @@ fun HomeBrowsingDashboard(
                             } else {
                                 LazyVerticalGrid(
                                     state = gridState,
-                                    columns = GridCells.Fixed(2),
-                                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    columns = GridCells.Fixed(3),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                                     modifier = Modifier.fillMaxSize()
                                 ) {
                                     // 1. 今日首推精选 (spans both columns)
                                     if (list.isNotEmpty()) {
-                                        item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(2) }) {
+                                        item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(3) }) {
                                             val firstItem = list.first()
                                             HeadlineSpotlightCard(
                                                 vod = firstItem,
@@ -1095,7 +1096,7 @@ fun VodGridCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .height(if (isAlteredStyle) 235.dp else 220.dp)
+            .aspectRatio(0.7f) // Movie poster aspect ratio
             .graphicsLayer {
                 alpha = animatedAlpha
                 translationY = animatedOffsetY
@@ -1232,7 +1233,7 @@ fun FavoriteVodGridCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .height(220.dp)
+            .aspectRatio(0.7f)
             .clickable(onClick = onClick)
             .border(
                 0.8.dp,
@@ -1962,109 +1963,164 @@ fun EmbeddedVideoSection(
         }
     }
 
-    val content = @Composable { modifier: Modifier ->
-        Column(modifier = modifier.background(Color.Black)) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color(0xFF1E1E1E))
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                    Icon(
-                        Icons.Default.PlayCircle,
-                        contentDescription = "Playing",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = title,
-                        color = Color.White,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
+    var isLocked by remember { mutableStateOf(false) }
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    // Speed Control
-                    Surface(
-                        color = Color.Transparent,
-                        shape = RoundedCornerShape(4.dp),
-                        modifier = Modifier.clickable {
-                            playbackSpeed = when (playbackSpeed) {
-                                1f -> 1.25f
-                                1.25f -> 1.5f
-                                1.5f -> 2f
-                                2f -> 0.5f
-                                0.5f -> 1f
-                                else -> 1f
+    val content = @Composable { modifier: Modifier, isOverlayMode: Boolean ->
+        Box(modifier = modifier) {
+            Column(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+                if (!isLocked) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFF1E1E1E))
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Icon(
+                                Icons.Default.PlayCircle,
+                                contentDescription = "Playing",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = title,
+                                color = Color.White,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Surface(
+                                color = Color.Transparent,
+                                shape = RoundedCornerShape(4.dp),
+                                modifier = Modifier.clickable {
+                                    playbackSpeed = when (playbackSpeed) {
+                                        1f -> 1.25f
+                                        1.25f -> 1.5f
+                                        1.5f -> 2f
+                                        2f -> 0.5f
+                                        0.5f -> 1f
+                                        else -> 1f
+                                    }
+                                    exoPlayer.playbackParameters = androidx.media3.common.PlaybackParameters(playbackSpeed)
+                                }
+                            ) {
+                                Text(
+                                    text = "${playbackSpeed}x",
+                                    color = Color(0xFF4DB6AC),
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
                             }
-                            exoPlayer.playbackParameters = androidx.media3.common.PlaybackParameters(playbackSpeed)
+
+                            IconButton(
+                                onClick = { isFullScreen = !isFullScreen },
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(
+                                    if (isFullScreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                                    contentDescription = "Fullscreen Toggle",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            
+                            Spacer(modifier = Modifier.width(8.dp))
+
+                            IconButton(onClick = onClose, modifier = Modifier.size(28.dp)) {
+                                Icon(
+                                    Icons.Default.Close,
+                                    contentDescription = "Close",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
                         }
-                    ) {
-                        Text(
-                            text = "${playbackSpeed}x",
-                            color = Color(0xFF4DB6AC),
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                        )
-                    }
-
-                    IconButton(
-                        onClick = { isFullScreen = !isFullScreen },
-                        modifier = Modifier.size(28.dp)
-                    ) {
-                        Icon(
-                            if (isFullScreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
-                            contentDescription = "Fullscreen Toggle",
-                            tint = Color.White,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                    
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    IconButton(onClick = onClose, modifier = Modifier.size(28.dp)) {
-                        Icon(
-                            Icons.Default.Close,
-                            contentDescription = "Close",
-                            tint = Color.White,
-                            modifier = Modifier.size(20.dp)
-                        )
                     }
                 }
-            }
 
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .background(Color.Black)
-            ) {
-                AndroidView(
-                    modifier = Modifier.fillMaxSize(),
-                    factory = { ctx ->
-                        androidx.media3.ui.PlayerView(ctx).apply {
-                            player = exoPlayer
-                            useController = true
-                            setShowNextButton(false)
-                            setShowPreviousButton(false)
-                            setShowFastForwardButton(true)
-                            setShowRewindButton(true)
-                            controllerShowTimeoutMs = 3000
-                            setKeepScreenOn(true)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .background(Color.Black)
+                ) {
+                    AndroidView(
+                        modifier = Modifier.fillMaxSize(),
+                        factory = { ctx ->
+                            androidx.media3.ui.PlayerView(ctx).apply {
+                                player = exoPlayer
+                                useController = true
+                                setShowNextButton(false)
+                                setShowPreviousButton(false)
+                                setShowFastForwardButton(true)
+                                setShowRewindButton(true)
+                                controllerShowTimeoutMs = 3000
+                                setKeepScreenOn(true)
+                            }
+                        },
+                        update = { view ->
+                            view.player = exoPlayer
                         }
-                    },
-                    update = { view ->
-                        view.player = exoPlayer
+                    )
+
+                    if (isOverlayMode) {
+                        if (isLocked) {
+                            Box(modifier = Modifier
+                                .fillMaxSize()
+                                .pointerInput(Unit) {
+                                    detectTapGestures(onTap = { /* Prevent touches passing through */ })
+                                }
+                            )
+                        } else {
+                            // Top 75% absorbs drags for seeking, bottom 25% allowed for ExoPlayer Controller
+                            var dragPosition by remember { mutableLongStateOf(-1L) }
+                            Box(modifier = Modifier
+                                .fillMaxWidth()
+                                .fillMaxHeight(0.75f)
+                                .align(Alignment.TopCenter)
+                                .pointerInput(Unit) {
+                                    detectDragGestures(
+                                        onDragStart = { dragPosition = exoPlayer.currentPosition },
+                                        onDrag = { change, dragAmount -> 
+                                            change.consume()
+                                            if (dragPosition != -1L) {
+                                                val duration = exoPlayer.duration.coerceAtLeast(0L)
+                                                dragPosition += (dragAmount.x * 600).toLong() 
+                                                dragPosition = dragPosition.coerceIn(0L, duration)
+                                                exoPlayer.seekTo(dragPosition)
+                                            }
+                                        },
+                                        onDragEnd = { dragPosition = -1L },
+                                        onDragCancel = { dragPosition = -1L }
+                                    )
+                                }
+                            )
+                        }
+
+                        // Lock Button Overlay
+                        IconButton(
+                            onClick = { isLocked = !isLocked },
+                            modifier = Modifier
+                                .align(Alignment.CenterStart)
+                                .padding(start = 24.dp)
+                                .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                        ) {
+                            Icon(
+                                if (isLocked) Icons.Default.Lock else Icons.Default.LockOpen,
+                                contentDescription = "Lock Controls",
+                                tint = Color.White
+                            )
+                        }
                     }
-                )
+                }
             }
         }
     }
@@ -2074,12 +2130,11 @@ fun EmbeddedVideoSection(
             onDismissRequest = { isFullScreen = false },
             properties = androidx.compose.ui.window.DialogProperties(
                 usePlatformDefaultWidth = false,
-                dismissOnBackPress = true,
+                dismissOnBackPress = !isLocked,
                 decorFitsSystemWindows = false
             )
         ) {
             val context = androidx.compose.ui.platform.LocalContext.current
-            val audioManager = context.getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
             val view = androidx.compose.ui.platform.LocalView.current
             
             androidx.compose.runtime.DisposableEffect(view) {
@@ -2090,24 +2145,19 @@ fun EmbeddedVideoSection(
                 val dialogWindow = (view.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window
                 dialogWindow?.setLayout(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT)
                 dialogWindow?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.BLACK))
-                
-                if (dialogWindow != null) {
-                    val controller = androidx.core.view.WindowCompat.getInsetsController(dialogWindow, view)
-                    controller.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-                    controller.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
-                }
+
+                // Safely hide system UI using standard flags to prevent InputDispatcher crashes
+                dialogWindow?.decorView?.systemUiVisibility = (
+                    android.view.View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                    or android.view.View.SYSTEM_UI_FLAG_FULLSCREEN
+                    or android.view.View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                )
 
                 onDispose {
                     activity?.requestedOrientation = originalOrientation
                 }
             }
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black)
-            ) {
-                content(Modifier.fillMaxSize())
-            }
+            content(Modifier.fillMaxSize(), true)
         }
     } else {
         Card(
@@ -2118,7 +2168,7 @@ fun EmbeddedVideoSection(
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(containerColor = Color.Black)
         ) {
-            content(Modifier.fillMaxSize())
+            content(Modifier.fillMaxSize(), false)
         }
     }
 }
@@ -2235,66 +2285,72 @@ fun PaginationControls(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 6.dp),
+            .padding(vertical = 12.dp),
         contentAlignment = Alignment.Center
     ) {
-        // Futuristic glassmorphic micro-floating capsule
+        // Aesthetic micro-pill layout
         Row(
             modifier = Modifier
                 .clip(CircleShape)
-                .background(Color(0xE6FAF7F2)) // Silky high-opacity frosted white warm glass
-                .border(
-                    width = 1.dp,
-                    brush = Brush.linearGradient(
-                        listOf(Color.White.copy(alpha = 0.9f), Color(0xFFFCA524).copy(alpha = 0.2f))
-                    ),
-                    shape = CircleShape
-                )
-                .padding(horizontal = 4.dp, vertical = 3.dp),
+                .background(Color(0xFF2C2621))
+                .border(1.dp, Color(0xFFFCA524).copy(alpha = 0.3f), CircleShape)
+                .padding(horizontal = 6.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(2.dp)
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            // Previous button, circular & subtle
             IconButton(
                 onClick = { onPageChange(currentPage - 1) },
                 enabled = currentPage > 1,
                 modifier = Modifier
-                    .size(28.dp)
+                    .size(32.dp)
                     .clip(CircleShape)
-                    .background(if (currentPage > 1) Color(0x0F000000) else Color.Transparent)
-                    .testTag("prev_page_button")
+                    .background(if (currentPage > 1) Color(0x1AFCECC) else Color.Transparent)
             ) {
                 Icon(
                     imageVector = Icons.Default.ArrowBack,
                     contentDescription = "上一页",
-                    tint = if (currentPage > 1) Color(0xFF24201A) else Color(0x3324201A),
-                    modifier = Modifier.size(12.dp)
+                    tint = if (currentPage > 1) Color(0xFFFCA524) else Color.Gray,
+                    modifier = Modifier.size(14.dp)
                 )
             }
 
-            // Compact Elegant indicator
+            // Animated page numbers
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .clip(CircleShape)
                     .clickable { isInputExpanded = !isInputExpanded }
-                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
             ) {
-                Text(
-                    text = "$currentPage",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Black,
-                    color = Color(0xFFFCA524)
-                )
+                androidx.compose.animation.AnimatedContent(
+                    targetState = currentPage,
+                    transitionSpec = {
+                        if (targetState > initialState) {
+                            (slideInVertically { height -> height } + fadeIn()).togetherWith(slideOutVertically { height -> -height } + fadeOut())
+                        } else {
+                            (slideInVertically { height -> -height } + fadeIn()).togetherWith(slideOutVertically { height -> height } + fadeOut())
+                        }.using(
+                            SizeTransform(clip = false)
+                        )
+                    }, label = "page_anim"
+                ) { targetPage ->
+                    Text(
+                        text = "$targetPage",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color.White
+                    )
+                }
+                
                 Text(
                     text = " / $totalPages",
-                    fontSize = 10.sp,
+                    fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
-                    color = Color(0xFF6E6356)
+                    color = Color.Gray,
+                    modifier = Modifier.padding(start = 2.dp)
                 )
             }
 
-            // Quick tiny slide input for high-end feel
             AnimatedVisibility(
                 visible = isInputExpanded,
                 enter = expandHorizontally(expandFrom = Alignment.End) + fadeIn(),
@@ -2302,7 +2358,7 @@ fun PaginationControls(
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(end = 2.dp)
+                    modifier = Modifier.padding(end = 4.dp)
                 ) {
                     androidx.compose.foundation.text.BasicTextField(
                         value = jumpPageInput,
@@ -2325,24 +2381,23 @@ fun PaginationControls(
                             }
                         ),
                         textStyle = androidx.compose.ui.text.TextStyle(
-                            fontSize = 10.sp,
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFF24201A),
+                            color = Color.White,
                             textAlign = TextAlign.Center
                         ),
                         modifier = Modifier
-                            .width(32.dp)
-                            .height(20.dp)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(Color(0x0F000000))
-                            .border(0.5.dp, Color(0xFFFCA524).copy(alpha = 0.5f), RoundedCornerShape(6.dp))
-                            .padding(top = 1.dp)
-                            .testTag("jump_page_input")
+                            .width(36.dp)
+                            .height(24.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color.Black.copy(alpha = 0.5f))
+                            .border(1.dp, Color(0xFFFCA524), RoundedCornerShape(8.dp))
+                            .padding(top = 3.dp)
                     )
-                    Spacer(modifier = Modifier.width(3.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
                     Box(
                         modifier = Modifier
-                            .size(20.dp)
+                            .size(24.dp)
                             .clip(CircleShape)
                             .background(Color(0xFFFCA524))
                             .clickable {
@@ -2351,35 +2406,32 @@ fun PaginationControls(
                                     onPageChange(parse)
                                     isInputExpanded = false
                                 }
-                            }
-                            .testTag("jump_go_button"),
+                            },
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.Check,
                             contentDescription = "验证",
                             tint = Color.White,
-                            modifier = Modifier.size(9.dp)
+                            modifier = Modifier.size(14.dp)
                         )
                     }
                 }
             }
 
-            // Next button, circular & subtle
             IconButton(
                 onClick = { onPageChange(currentPage + 1) },
                 enabled = currentPage < totalPages,
                 modifier = Modifier
-                    .size(28.dp)
+                    .size(32.dp)
                     .clip(CircleShape)
-                    .background(if (currentPage < totalPages) Color(0x0F000000) else Color.Transparent)
-                    .testTag("next_page_button")
+                    .background(if (currentPage < totalPages) Color(0x1AFCECC) else Color.Transparent)
             ) {
                 Icon(
                     imageVector = Icons.Default.ArrowForward,
                     contentDescription = "下一页",
-                    tint = if (currentPage < totalPages) Color(0xFF24201A) else Color(0x3324201A),
-                    modifier = Modifier.size(12.dp)
+                    tint = if (currentPage < totalPages) Color(0xFFFCA524) else Color.Gray,
+                    modifier = Modifier.size(14.dp)
                 )
             }
         }
@@ -2759,9 +2811,9 @@ fun CollectionListView(
             )
         } else {
             LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                columns = GridCells.Fixed(3),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
                 items(filteredItems) { item ->
@@ -2808,7 +2860,7 @@ fun HistoryVodGridCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .height(180.dp)
+            .aspectRatio(0.7f)
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(12.dp)
     ) {
